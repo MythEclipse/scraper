@@ -13,15 +13,17 @@ use tracing::debug;
 pub const DEFAULT_CACHE_TTL: u64 = 300;
 
 /// Typed JSON cache helper over the shared mytheclipse `RedisCache`.
-pub struct Cache<'a> {
-    _marker: std::marker::PhantomData<&'a ()>,
-}
+///
+/// The helper is stateless: every operation checks out a connection from the
+/// process-wide deadpool (see
+/// [`fresh_redis_cache`](super::mytheclipse::fresh_redis_cache)), so there is
+/// nothing to configure and nothing to hold on to.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Cache;
 
-impl<'a> Cache<'a> {
-    pub fn new(_pool: &'a deadpool_redis::Pool) -> Self {
-        Self {
-            _marker: std::marker::PhantomData,
-        }
+impl Cache {
+    pub const fn new() -> Self {
+        Self
     }
 
     async fn cache(&self) -> Result<mytheclipse_cache::RedisCache, CacheError> {

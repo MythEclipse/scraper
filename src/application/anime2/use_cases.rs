@@ -8,8 +8,6 @@
 //! TODO: Once parsers return domain types, replace shared types with
 //!       `crate::domain::entity::anime::{GenreAnimeItem, SearchAnimeItem, LatestAnimeItem}`.
 
-use deadpool_redis::Pool;
-
 use crate::domain::error::*;
 use crate::domain::repository::ScrapingRepository;
 use crate::infrastructure::cache::redis::Cache;
@@ -107,19 +105,15 @@ const COMPLETE_CACHE_TTL: u64 = 300;
 
 pub struct Anime2UseCases {
     repository: AlqanimeRepository,
-    redis_pool: Pool,
 }
 
 impl Anime2UseCases {
-    pub fn new(repository: AlqanimeRepository, redis_pool: Pool) -> Self {
-        Self {
-            repository,
-            redis_pool,
-        }
+    pub fn new(repository: AlqanimeRepository) -> Self {
+        Self { repository }
     }
 
-    fn cache(&self) -> Cache<'_> {
-        Cache::new(&self.redis_pool)
+    fn cache(&self) -> Cache {
+        Cache::new()
     }
 
     pub async fn index(&self) -> Result<Anime2Response, DomainError> {

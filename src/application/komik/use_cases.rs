@@ -6,8 +6,6 @@
 //!       `crate::infrastructure::repository::parsers::komik_parser`.
 //! TODO: Move response DTOs to `crate::presentation::dto::komik`.
 
-use deadpool_redis::Pool;
-
 use crate::domain::entity::anime::Pagination;
 use crate::domain::entity::komik::{ChapterData, DetailData, KomikGenre, KomikItem};
 use crate::domain::error::*;
@@ -29,19 +27,15 @@ const SEARCH_CACHE_TTL: u64 = 300;
 
 pub struct KomikUseCases {
     repository: KomikRepository,
-    redis_pool: Pool,
 }
 
 impl KomikUseCases {
-    pub fn new(repository: KomikRepository, redis_pool: Pool) -> Self {
-        Self {
-            repository,
-            redis_pool,
-        }
+    pub fn new(repository: KomikRepository) -> Self {
+        Self { repository }
     }
 
-    fn cache(&self) -> Cache<'_> {
-        Cache::new(&self.redis_pool)
+    fn cache(&self) -> Cache {
+        Cache::new()
     }
 
     pub async fn genre_list(&self) -> Result<Vec<KomikGenre>, DomainError> {

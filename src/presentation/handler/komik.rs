@@ -1,8 +1,6 @@
 //! Komik API handlers.
 
-use std::sync::Arc;
-
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::Json;
 use tracing::info;
 
@@ -12,7 +10,6 @@ use crate::presentation::dto::komik::{
     ChapterResponse, DetailResponse, GenreKomikResponse, GenresResponse, SearchKomikResponse,
 };
 use crate::presentation::error::AppError;
-use crate::presentation::state::AppState;
 
 // ============================================================================
 // Response DTOs
@@ -24,8 +21,8 @@ use crate::presentation::state::AppState;
 // Helper
 // ============================================================================
 
-fn make_use_cases(state: &Arc<AppState>) -> KomikUseCases {
-    KomikUseCases::new(KomikRepository::new(), state.redis_pool.clone())
+fn make_use_cases() -> KomikUseCases {
+    KomikUseCases::new(KomikRepository::new())
 }
 
 // ============================================================================
@@ -43,11 +40,9 @@ fn make_use_cases(state: &Arc<AppState>) -> KomikUseCases {
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn genre_list(
-    State(app_state): State<Arc<AppState>>,
-) -> Result<Json<GenresResponse>, AppError> {
+pub async fn genre_list() -> Result<Json<GenresResponse>, AppError> {
     info!("Handling request for komik genre list");
-    let data = make_use_cases(&app_state).genre_list().await?;
+    let data = make_use_cases().genre_list().await?;
     Ok(Json(GenresResponse {
         status: "Ok".to_string(),
         data,
@@ -65,12 +60,9 @@ pub async fn genre_list(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn chapter_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<ChapterResponse>, AppError> {
+pub async fn chapter_slug(Path(slug): Path<String>) -> Result<Json<ChapterResponse>, AppError> {
     info!("Handling request for komik chapter slug: {}", slug);
-    let data = make_use_cases(&app_state).chapter_slug(slug).await?;
+    let data = make_use_cases().chapter_slug(slug).await?;
     Ok(Json(ChapterResponse {
         message: "Ok".to_string(),
         data,
@@ -88,12 +80,9 @@ pub async fn chapter_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn detail_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<DetailResponse>, AppError> {
+pub async fn detail_slug(Path(slug): Path<String>) -> Result<Json<DetailResponse>, AppError> {
     info!("Handling request for komik detail slug: {}", slug);
-    let data = make_use_cases(&app_state).detail_slug(slug).await?;
+    let data = make_use_cases().detail_slug(slug).await?;
     Ok(Json(DetailResponse { status: true, data }))
 }
 
@@ -108,13 +97,10 @@ pub async fn detail_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn genre_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<GenreKomikResponse>, AppError> {
+pub async fn genre_slug(Path(slug): Path<String>) -> Result<Json<GenreKomikResponse>, AppError> {
     info!("Handling request for komik genre slug: {}", slug);
     let slug_clone = slug.clone();
-    let (data, pagination) = make_use_cases(&app_state).genre_slug(slug).await?;
+    let (data, pagination) = make_use_cases().genre_slug(slug).await?;
     Ok(Json(GenreKomikResponse {
         status: "Ok".to_string(),
         genre: slug_clone,
@@ -135,7 +121,6 @@ pub async fn genre_slug(
     )
 )]
 pub async fn genre_slug_page(
-    State(app_state): State<Arc<AppState>>,
     Path((slug, page)): Path<(String, String)>,
 ) -> Result<Json<GenreKomikResponse>, AppError> {
     let page_num = page
@@ -145,7 +130,7 @@ pub async fn genre_slug_page(
         "Handling request for komik genre slug: {} page: {}",
         slug, page_num
     );
-    let (data, pagination) = make_use_cases(&app_state)
+    let (data, pagination) = make_use_cases()
         .genre_slug_page(slug.clone(), page_num)
         .await?;
     Ok(Json(GenreKomikResponse {
@@ -167,17 +152,12 @@ pub async fn genre_slug_page(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn manga_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<GenreKomikResponse>, AppError> {
+pub async fn manga_slug(Path(slug): Path<String>) -> Result<Json<GenreKomikResponse>, AppError> {
     let page = slug
         .parse::<u32>()
         .map_err(|_| AppError::ScraperError("Invalid page number".to_string()))?;
     info!("Handling request for komik manga page: {}", page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .manga_slug(page.to_string())
-        .await?;
+    let (data, pagination) = make_use_cases().manga_slug(page.to_string()).await?;
     Ok(Json(GenreKomikResponse {
         status: "Ok".to_string(),
         genre: "manga".to_string(),
@@ -197,17 +177,12 @@ pub async fn manga_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn manhua_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<GenreKomikResponse>, AppError> {
+pub async fn manhua_slug(Path(slug): Path<String>) -> Result<Json<GenreKomikResponse>, AppError> {
     let page = slug
         .parse::<u32>()
         .map_err(|_| AppError::ScraperError("Invalid page number".to_string()))?;
     info!("Handling request for komik manhua page: {}", page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .manhua_slug(page.to_string())
-        .await?;
+    let (data, pagination) = make_use_cases().manhua_slug(page.to_string()).await?;
     Ok(Json(GenreKomikResponse {
         status: "Ok".to_string(),
         genre: "manhua".to_string(),
@@ -227,17 +202,12 @@ pub async fn manhua_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn manhwa_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<GenreKomikResponse>, AppError> {
+pub async fn manhwa_slug(Path(slug): Path<String>) -> Result<Json<GenreKomikResponse>, AppError> {
     let page = slug
         .parse::<u32>()
         .map_err(|_| AppError::ScraperError("Invalid page number".to_string()))?;
     info!("Handling request for komik manhwa page: {}", page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .manhwa_slug(page.to_string())
-        .await?;
+    let (data, pagination) = make_use_cases().manhwa_slug(page.to_string()).await?;
     Ok(Json(GenreKomikResponse {
         status: "Ok".to_string(),
         genre: "manhwa".to_string(),
@@ -257,17 +227,12 @@ pub async fn manhwa_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn popular_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<GenreKomikResponse>, AppError> {
+pub async fn popular_slug(Path(slug): Path<String>) -> Result<Json<GenreKomikResponse>, AppError> {
     let page = slug
         .parse::<u32>()
         .map_err(|_| AppError::ScraperError("Invalid page number".to_string()))?;
     info!("Handling request for komik popular page: {}", page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .popular_slug(page.to_string())
-        .await?;
+    let (data, pagination) = make_use_cases().popular_slug(page.to_string()).await?;
     Ok(Json(GenreKomikResponse {
         status: "Ok".to_string(),
         genre: "popular".to_string(),
@@ -287,12 +252,9 @@ pub async fn popular_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn search_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<SearchKomikResponse>, AppError> {
+pub async fn search_slug(Path(slug): Path<String>) -> Result<Json<SearchKomikResponse>, AppError> {
     info!("Handling request for komik search slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state).search_slug(slug).await?;
+    let (data, pagination) = make_use_cases().search_slug(slug).await?;
     Ok(Json(SearchKomikResponse {
         status: "Ok".to_string(),
         data,
@@ -312,7 +274,6 @@ pub async fn search_slug(
     )
 )]
 pub async fn search_slug_page(
-    State(app_state): State<Arc<AppState>>,
     Path((slug, page)): Path<(String, String)>,
 ) -> Result<Json<SearchKomikResponse>, AppError> {
     let page_num = page
@@ -322,9 +283,7 @@ pub async fn search_slug_page(
         "Handling request for komik search slug: {} page: {}",
         slug, page_num
     );
-    let (data, pagination) = make_use_cases(&app_state)
-        .search_slug_page(slug, page_num)
-        .await?;
+    let (data, pagination) = make_use_cases().search_slug_page(slug, page_num).await?;
     Ok(Json(SearchKomikResponse {
         status: "Ok".to_string(),
         data,

@@ -5,6 +5,7 @@
 //! downloader endpoint defined in the spec (Shirokami-API reference).
 
 use crate::domain::entity::downloader::DownloadResult;
+use crate::domain::entity::platform::Platform;
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::repository::DownloaderRepository;
 
@@ -136,51 +137,5 @@ pub async fn download_bilibili(url: &str) -> Result<DownloadResult, ScrapingErro
 
 /// Use case: detect platform from URL pattern.
 pub fn detect_platform(url: &str) -> String {
-    if url.contains("instagram.com") || url.contains("instagr.am") {
-        "instagram".to_string()
-    } else if url.contains("facebook.com") || url.contains("fb.watch") {
-        "facebook".to_string()
-    } else if url.contains("tiktok.com") || url.contains("vm.tiktok.com") {
-        "tiktok".to_string()
-    } else if url.contains("youtube.com") || url.contains("youtu.be") {
-        "youtube".to_string()
-    } else if url.contains("open.spotify.com") || url.contains("spotify.link") {
-        "spotify".to_string()
-    } else if url.contains("twitter.com") || url.contains("x.com") || url.contains("t.co/") {
-        "twitter".to_string()
-    } else if url.contains("pinterest") {
-        "pinterest".to_string()
-    } else if url.contains("reddit.com") || url.contains("redd.it") {
-        "reddit".to_string()
-    } else if url.contains("mega.nz") || url.contains("mega.io") {
-        "mega".to_string()
-    } else if url.contains("terabox") || url.contains("nfile") {
-        "terabox".to_string()
-    } else if url.contains("drive.google.com") || url.contains("docs.google.com") {
-        "gdrive".to_string()
-    } else if url.contains("mediafire.com") {
-        "mediafire".to_string()
-    } else if url.contains("pixeldrain.com") {
-        "pixeldrain".to_string()
-    } else if url.contains("threads.net") || url.contains("threads.com") {
-        "threads".to_string()
-    } else if url.contains("dood.") || url.contains("doodstream") || url.contains("dood.so") {
-        "doodstream".to_string()
-    } else if url.contains("krakenfiles.com") {
-        "krakenfiles".to_string()
-    } else if url.contains("danbooru") || url.contains("safebooru") || url.contains("rule34") {
-        "danbooru".to_string()
-    } else if url.contains("soundcloud.com") {
-        "soundcloud".to_string()
-    } else if url.contains("dailymotion.com") {
-        "dailymotion".to_string()
-    } else if url.contains("streamable.com") {
-        "streamable".to_string()
-    } else if url.contains("videy.co") {
-        "videy".to_string()
-    } else if url.contains("bilibili.com") || url.contains("b23.tv") {
-        "bilibili".to_string()
-    } else {
-        "unknown".to_string()
-    }
+    Platform::detect(url).as_str().to_string()
 }

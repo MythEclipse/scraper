@@ -3,8 +3,6 @@
 //! Orchestrates repository fetching, caching, and image poster processing.
 //! Returns pure domain types — no DTOs.
 
-use deadpool_redis::Pool;
-
 use crate::domain::entity::anime::*;
 use crate::domain::error::*;
 use crate::infrastructure::cache::redis::Cache;
@@ -16,19 +14,15 @@ const DEFAULT_CACHE_TTL: u64 = 300;
 
 pub struct AnimeUseCases {
     repository: OtakudesuRepository,
-    redis_pool: Pool,
 }
 
 impl AnimeUseCases {
-    pub fn new(repository: OtakudesuRepository, redis_pool: Pool) -> Self {
-        Self {
-            repository,
-            redis_pool,
-        }
+    pub fn new(repository: OtakudesuRepository) -> Self {
+        Self { repository }
     }
 
-    fn cache(&self) -> Cache<'_> {
-        Cache::new(&self.redis_pool)
+    fn cache(&self) -> Cache {
+        Cache::new()
     }
 
     pub async fn get_anime_index(&self) -> Result<AnimeData, DomainError> {

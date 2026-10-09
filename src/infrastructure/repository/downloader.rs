@@ -13,6 +13,7 @@ use aes::cipher::{BlockDecrypt, KeyInit};
 use base64::Engine;
 
 use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
+use crate::domain::entity::platform::Platform;
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, USER_AGENT};
@@ -446,37 +447,54 @@ impl DownloaderRepository {
         url: &str,
         cookies: Option<&str>,
     ) -> Result<DownloadResult, ScrapingError> {
-        let platform = crate::application::downloader::detect_platform(url);
-        match platform.as_str() {
-            "instagram" | "facebook" => match Self::download_instagram(url, cookies).await {
-                ok @ Ok(_) => ok,
-                Err(_) => Self::download_facebook(url, cookies).await,
-            },
-            "tiktok" => Self::download_tiktok(url, cookies).await,
-            "videy" => Self::download_videy(url).await,
-            "youtube" => match Self::download_youtube(url, "720").await {
+        let platform = Platform::detect(url);
+        match platform {
+            // Instagram and Facebook share the SnapSave backend: try the
+            // Instagram entrypoint first, then the Facebook one.
+            Platform::Instagram | Platform::Facebook => {
+                match Self::download_snapsave(url, cookies).await {
+                    ok @ Ok(_) => ok,
+                    Err(_) => Self::download_snapsave(url, cookies).await,
+                }
+            }
+            Platform::TikTok => Self::download_tiktok(url, cookies).await,
+            Platform::Videy => Self::download_videy(url).await,
+            // YouTube: try the video downloader, fall back to MP3 extraction
+            // so a blocked yt-dlp path still yields audio.
+            Platform::YouTube => match Self::download_youtube(url, "720").await {
                 ok @ Ok(_) => ok,
                 Err(_) => Self::download_youtube_mp3(url).await,
             },
-            "spotify" => Self::download_spotify(url, cookies).await,
-            "twitter" => Self::download_twitter(url, cookies).await,
-            "pinterest" => Self::download_pinterest(url).await,
-            "mega" => Self::download_mega(url).await,
-            "terabox" => Self::download_terabox(url).await,
-            "gdrive" => Self::download_gdrive(url).await,
-            "mediafire" => Self::download_mediafire(url).await,
-            "pixeldrain" => Self::download_pixeldrain(url).await,
-            "threads" => Self::download_threads(url, cookies).await,
-            "doodstream" => Self::download_doodstream(url).await,
-            "krakenfiles" => Self::download_krakenfiles(url).await,
-            "danbooru" => Self::download_danbooru(url).await,
-            "soundcloud" => Self::download_soundcloud(url).await,
-            "dailymotion" => Self::download_dailymotion(url).await,
-            "reddit" => Self::download_reddit(url).await,
-            "streamable" => Self::download_streamable(url).await,
-            "bilibili" => Self::download_bilibili(url).await,
-            _ => fetch_all_in_one(url).await,
+            Platform::Spotify => Self::download_spotify(url, cookies).await,
+            Platform::Twitter => Self::download_twitter(url, cookies).await,
+            Platform::Pinterest => Self::download_pinterest(url).await,
+            Platform::Reddit => Self::download_reddit(url).await,
+            Platform::Mega => Self::download_mega(url).await,
+            Platform::TeraBox => Self::download_terabox(url).await,
+            Platform::GoogleDrive => Self::download_gdrive(url).await,
+            Platform::MediaFire => Self::download_mediafire(url).await,
+            Platform::PixelDrain => Self::download_pixeldrain(url).await,
+            Platform::Threads => Self::download_threads(url, cookies).await,
+            Platform::DoodStream => Self::download_doodstream(url).await,
+            Platform::KrakenFiles => Self::download_krakenfiles(url).await,
+            Platform::Danbooru => Self::download_danbooru(url).await,
+            Platform::SoundCloud => Self::download_soundcloud(url).await,
+            Platform::Dailymotion => Self::download_dailymotion(url).await,
+            Platform::Streamable => Self::download_streamable(url).await,
+            Platform::Bilibili => Self::download_bilibili(url).await,
+            Platform::Unknown => fetch_all_in_one(url).await,
         }
+    }
+
+    /// Shared SnapSave backend for Instagram / Facebook / Threads.
+    ///
+    /// Both platforms are served by the same snapsave.app extraction, so the
+    /// two public entrypoints are thin aliases over this one implementation.
+    async fn download_snapsave(
+        url: &str,
+        _cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        fetch_snapsave(url).await
     }
 
     /// Instagram / Facebook via SnapSave.
@@ -484,17 +502,17 @@ impl DownloaderRepository {
     /// fetches its own).
     pub async fn download_instagram(
         url: &str,
-        _cookies: Option<&str>,
+        cookies: Option<&str>,
     ) -> Result<DownloadResult, ScrapingError> {
-        fetch_snapsave(url).await
+        Self::download_snapsave(url, cookies).await
     }
 
     /// Facebook via SnapSave.
     pub async fn download_facebook(
         url: &str,
-        _cookies: Option<&str>,
+        cookies: Option<&str>,
     ) -> Result<DownloadResult, ScrapingError> {
-        fetch_snapsave(url).await
+        Self::download_snapsave(url, cookies).await
     }
 
     /// TikTok via tikwm.com.

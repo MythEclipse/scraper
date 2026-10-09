@@ -1,8 +1,6 @@
 //! Anime (Otakudesu) API handlers.
 
-use std::sync::Arc;
-
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::Json;
 use serde::Serialize;
 use tracing::info;
@@ -12,7 +10,6 @@ use crate::application::anime::use_cases::AnimeUseCases;
 use crate::domain::entity::anime::*;
 use crate::infrastructure::repository::OtakudesuRepository;
 use crate::presentation::error::AppError;
-use crate::presentation::state::AppState;
 
 // ============================================================================
 // Response DTOs
@@ -77,8 +74,8 @@ pub struct GenreListResponse {
 // Helper
 // ============================================================================
 
-fn make_use_cases(state: &Arc<AppState>) -> AnimeUseCases {
-    AnimeUseCases::new(OtakudesuRepository::new(), state.redis_pool.clone())
+fn make_use_cases() -> AnimeUseCases {
+    AnimeUseCases::new(OtakudesuRepository::new())
 }
 
 // ============================================================================
@@ -94,11 +91,9 @@ fn make_use_cases(state: &Arc<AppState>) -> AnimeUseCases {
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn anime_index(
-    State(app_state): State<Arc<AppState>>,
-) -> Result<Json<AnimeData>, AppError> {
+pub async fn anime_index() -> Result<Json<AnimeData>, AppError> {
     info!("Handling request for anime index");
-    let data = make_use_cases(&app_state).get_anime_index().await?;
+    let data = make_use_cases().get_anime_index().await?;
     Ok(Json(data))
 }
 
@@ -111,11 +106,9 @@ pub async fn anime_index(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn genres(
-    State(app_state): State<Arc<AppState>>,
-) -> Result<Json<GenresResponse>, AppError> {
+pub async fn genres() -> Result<Json<GenresResponse>, AppError> {
     info!("Handling request for anime genres");
-    let data = make_use_cases(&app_state).get_genres().await?;
+    let data = make_use_cases().get_genres().await?;
     Ok(Json(GenresResponse {
         status: "Ok".to_string(),
         data,
@@ -131,12 +124,9 @@ pub async fn genres(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn detail_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<DetailResponse>, AppError> {
+pub async fn detail_slug(Path(slug): Path<String>) -> Result<Json<DetailResponse>, AppError> {
     info!("Starting request for detail slug: {}", slug);
-    let data = make_use_cases(&app_state).get_anime_detail(slug).await?;
+    let data = make_use_cases().get_anime_detail(slug).await?;
     Ok(Json(DetailResponse {
         status: Some("Ok".to_string()),
         data,
@@ -152,14 +142,9 @@ pub async fn detail_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn complete_anime_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<ListResponse>, AppError> {
+pub async fn complete_anime_slug(Path(slug): Path<String>) -> Result<Json<ListResponse>, AppError> {
     info!("Starting request for complete_anime slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state)
-        .get_complete_anime_page(slug)
-        .await?;
+    let (data, pagination) = make_use_cases().get_complete_anime_page(slug).await?;
     let total = data.len() as i64;
     Ok(Json(ListResponse {
         message: "Success".to_string(),
@@ -178,12 +163,9 @@ pub async fn complete_anime_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn full_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<FullResponse>, AppError> {
+pub async fn full_slug(Path(slug): Path<String>) -> Result<Json<FullResponse>, AppError> {
     info!("Starting request for full slug: {}", slug);
-    let data = make_use_cases(&app_state).get_anime_full(slug).await?;
+    let data = make_use_cases().get_anime_full(slug).await?;
     Ok(Json(FullResponse {
         status: "Ok".to_string(),
         data,
@@ -200,13 +182,10 @@ pub async fn full_slug(
     )
 )]
 pub async fn ongoing_anime_slug(
-    State(app_state): State<Arc<AppState>>,
     Path(slug): Path<String>,
 ) -> Result<Json<OngoingAnimeResponse>, AppError> {
     info!("Starting request for ongoing_anime slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state)
-        .get_ongoing_anime_page(slug)
-        .await?;
+    let (data, pagination) = make_use_cases().get_ongoing_anime_page(slug).await?;
     Ok(Json(OngoingAnimeResponse {
         status: "Ok".to_string(),
         data,
@@ -223,14 +202,9 @@ pub async fn ongoing_anime_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn latest_slug(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<LatestAnimeResponse>, AppError> {
+pub async fn latest_slug(Path(slug): Path<String>) -> Result<Json<LatestAnimeResponse>, AppError> {
     info!("Starting request for latest slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state)
-        .get_latest_anime_page(slug)
-        .await?;
+    let (data, pagination) = make_use_cases().get_latest_anime_page(slug).await?;
     Ok(Json(LatestAnimeResponse {
         status: "Ok".to_string(),
         data,
@@ -247,12 +221,9 @@ pub async fn latest_slug(
         (status = 500, description = "Internal Server Error"),
     )
 )]
-pub async fn search_slug_index(
-    State(app_state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-) -> Result<Json<SearchResponse>, AppError> {
+pub async fn search_slug_index(Path(slug): Path<String>) -> Result<Json<SearchResponse>, AppError> {
     info!("Starting request for search slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state)
+    let (data, pagination) = make_use_cases()
         .get_search_anime_page(slug, "1".to_string())
         .await?;
     Ok(Json(SearchResponse {
@@ -272,13 +243,10 @@ pub async fn search_slug_index(
     )
 )]
 pub async fn search_slug_page(
-    State(app_state): State<Arc<AppState>>,
     Path((slug, page)): Path<(String, String)>,
 ) -> Result<Json<SearchResponse>, AppError> {
     info!("Starting request for search slug: {} page: {}", slug, page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .get_search_anime_page(slug, page)
-        .await?;
+    let (data, pagination) = make_use_cases().get_search_anime_page(slug, page).await?;
     Ok(Json(SearchResponse {
         status: "Ok".to_string(),
         data,
@@ -296,11 +264,10 @@ pub async fn search_slug_page(
     )
 )]
 pub async fn genre_slug_index(
-    State(app_state): State<Arc<AppState>>,
     Path(slug): Path<String>,
 ) -> Result<Json<GenreListResponse>, AppError> {
     info!("Starting request for genre slug: {}", slug);
-    let (data, pagination) = make_use_cases(&app_state)
+    let (data, pagination) = make_use_cases()
         .get_genre_anime_page(slug, "1".to_string())
         .await?;
     Ok(Json(GenreListResponse {
@@ -320,13 +287,10 @@ pub async fn genre_slug_index(
     )
 )]
 pub async fn genre_slug_page(
-    State(app_state): State<Arc<AppState>>,
     Path((slug, page)): Path<(String, String)>,
 ) -> Result<Json<GenreListResponse>, AppError> {
     info!("Starting request for genre slug: {} page: {}", slug, page);
-    let (data, pagination) = make_use_cases(&app_state)
-        .get_genre_anime_page(slug, page)
-        .await?;
+    let (data, pagination) = make_use_cases().get_genre_anime_page(slug, page).await?;
     Ok(Json(GenreListResponse {
         status: "Ok".to_string(),
         data,

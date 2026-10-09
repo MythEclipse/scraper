@@ -95,11 +95,7 @@ impl Application {
         let db_arc = Arc::new(db);
         let event_bus = Arc::new(crate::events::bus::new_event_bus());
 
-        let redis_pool = crate::infrastructure::cache::redis_pool::redis_pool()
-            .map_err(|e| anyhow::anyhow!("Failed to init Redis pool: {}", e))?;
-
         let app_state = Arc::new(AppState {
-            redis_pool,
             db: db_arc.clone(),
             event_bus: event_bus.clone(),
         });
