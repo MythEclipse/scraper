@@ -8,6 +8,10 @@ use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
+use super::patterns::{
+    TIKTOK_AUTHOR, TIKTOK_GENERIC_VIDEO_ID, TIKTOK_HAS_VIDEO_PATH, TIKTOK_SHORT_PATH, TIKTOK_TITLE,
+    TIKTOK_VIDEO_ID,
+};
 use super::shared::{format_filesize, run_playwright_scraper, run_ytdlp_json};
 
 /// Helper: parse the video-id portion from TikTok/Douyin URL.
@@ -17,7 +21,7 @@ fn extract_tiktok_id(url: &str) -> Option<String> {
     }
     // Handle short URLs like vm.tiktok.com/ZM8s5qJ6t — resolve redirect first
     if url.contains("vm.tiktok.com") || url.contains("vt.tiktok.com") {
-        let re = regex::Regex::new(r"/([A-Za-z0-9_-]+)$").ok()?;
+        let re = &*TIKTOK_SHORT_PATH;
         let short_code = re
             .captures(url)
             .and_then(|c| c.get(1))?
@@ -26,7 +30,7 @@ fn extract_tiktok_id(url: &str) -> Option<String> {
         return Some(short_code);
     }
     // TikTok URLs contain an 18-20 digit video ID in the path
-    let re = regex::Regex::new(r"/video/(\d{15,25})").ok()?;
+    let re = &*TIKTOK_VIDEO_ID;
     let caps = re.captures(url)?;
     Some(caps.get(1)?.as_str().to_string())
 }
@@ -37,7 +41,7 @@ async fn resolve_tiktok_url(url: &str) -> Result<String, ScrapingError> {
         return Ok(url.to_string());
     }
     // If it already has /video/<id>, return as-is
-    if regex::Regex::new(r"/video/\d+").unwrap().is_match(url) {
+    if TIKTOK_HAS_VIDEO_PATH.is_match(url) {
         return Ok(url.to_string());
     }
     // Short URL: follow redirects to get the canonical URL
@@ -62,8 +66,7 @@ async fn fetch_tiktok_embed(url: &str) -> Result<DownloadResult, ScrapingError> 
     // Resolve short URLs (vm/vt.tiktok.com) to the long form to get a video ID
     let resolved_url = resolve_tiktok_url(url).await?;
 
-    let video_id = regex::Regex::new(r"/video/(\d+)")
-        .unwrap()
+    let video_id = &TIKTOK_GENERIC_VIDEO_ID
         .captures(&resolved_url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
@@ -91,7 +94,7 @@ async fn fetch_tiktok_embed(url: &str) -> Result<DownloadResult, ScrapingError> 
             r#"<video[^>]*src="([^"]+)"[^>]*data-testid="play-video""#,
             r#"<video[^>]*src="([^"]+)""#,
         ] {
-            if let Some(m) = regex::Regex::new(pat).unwrap().captures(&html) {
+            if let Some(m) = regex::Regex::new(pat).ok().and_then(|r| r.captures(&html)) {
                 if let Some(url) = m.get(1) {
                     // prefer a *.mp4 URL over thumbnails/images
                     let cand = url.as_str().replace("&amp;", "&");
@@ -118,10 +121,7 @@ async fn fetch_tiktok_embed(url: &str) -> Result<DownloadResult, ScrapingError> 
     let (title, author) = {
         let mut title = None;
         let mut author = None;
-        if let Some(m) = regex::Regex::new(r#"<title[^>]*>([^<]+)</title>"#)
-            .unwrap()
-            .captures(&html)
-        {
+        if let Some(m) = TIKTOK_TITLE.captures(&html) {
             let raw = m
                 .get(1)
                 .map(|s| s.as_str().trim().to_string())
@@ -130,10 +130,7 @@ async fn fetch_tiktok_embed(url: &str) -> Result<DownloadResult, ScrapingError> 
                 title = Some(raw);
             }
         }
-        if let Some(m) = regex::Regex::new(r#"data-author-name="([^"]+)""#)
-            .unwrap()
-            .captures(&html)
-        {
+        if let Some(m) = TIKTOK_AUTHOR.captures(&html) {
             author = m.get(1).map(|s| s.as_str().to_string());
         }
         (title, author)

@@ -12,6 +12,10 @@ use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
+use super::patterns::{
+    H1, KRAKENFILES_ID, MEDIAFIRE_CDN, MEDIAFIRE_DOWNLOAD_LINK, MEDIAFIRE_ID_PARAM,
+    MEDIAFIRE_VIEWER_DATA, MEGA_FILE_ID, PIXELDRAIN_ID, TERABOX_HOST,
+};
 use super::shared::format_filesize;
 use aes::cipher::BlockDecrypt;
 use aes::cipher::KeyInit;
@@ -28,8 +32,7 @@ pub async fn fetch_mega(url: &str) -> Result<DownloadResult, ScrapingError> {
         .unwrap_or(Cow::Borrowed(&cleaned))
         .into_owned();
 
-    let file_id = regex::Regex::new(r"file/([^#]+)")
-        .unwrap()
+    let file_id = MEGA_FILE_ID
         .captures(&decoded_url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string());
@@ -218,10 +221,7 @@ pub async fn fetch_terabox(url: &str) -> Result<DownloadResult, ScrapingError> {
 
     if surl.is_none() {
         // Try resolving redirect
-        if !regex::Regex::new(r"^https?://(?:www\.|1024)?terabox(?:app)?\.com")
-            .unwrap()
-            .is_match(url)
-        {
+        if !TERABOX_HOST.is_match(url) {
             return Ok(DownloadResult::error("Invalid TeraBox URL."));
         }
 
@@ -371,8 +371,7 @@ pub async fn fetch_terabox(url: &str) -> Result<DownloadResult, ScrapingError> {
 }
 
 pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError> {
-    let id = regex::Regex::new(r"/[de]/([a-zA-Z0-9]+)")
-        .unwrap()
+    let id = &*PIXELDRAIN_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str())
@@ -430,8 +429,7 @@ pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError
         .await
         .map_err(|e| ScrapingError::Http(format!("DoodStream embed read failed: {}", e)))?;
 
-    let cdn_match = regex::Regex::new(r"\$\.get\('([^']+)',")
-        .unwrap()
+    let cdn_match = MEDIAFIRE_CDN
         .captures(&embed_resp)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string());
@@ -509,8 +507,7 @@ pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError
 
 pub async fn fetch_krakenfiles(url: &str) -> Result<DownloadResult, ScrapingError> {
     // Parse file ID from krakenfiles.com URL
-    let file_id = regex::Regex::new(r"krakenfiles\.com/v/([A-Za-z0-9_-]+)")
-        .unwrap()
+    let file_id = &*KRAKENFILES_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str())
@@ -573,7 +570,7 @@ pub async fn fetch_pixeldrain(url: &str) -> Result<DownloadResult, ScrapingError
         .await
         .map_err(|e| ScrapingError::Http(format!("PixelDrain read failed: {}", e)))?;
 
-    let re = regex::Regex::new(r"window\.viewer_data\s*=\s*(\{.*?\});").unwrap();
+    let re = &*MEDIAFIRE_VIEWER_DATA;
     let m = re
         .captures(&html)
         .and_then(|c| c.get(1))
@@ -608,7 +605,7 @@ pub async fn fetch_pixeldrain(url: &str) -> Result<DownloadResult, ScrapingError
 
 pub async fn fetch_gdrive(url: &str) -> Result<DownloadResult, ScrapingError> {
     let mut result = DownloadResult::error("Invalid Google Drive URL");
-    let id_re = regex::Regex::new(r"[?&]id=([a-zA-Z0-9_-]+)").unwrap();
+    let id_re = &*MEDIAFIRE_ID_PARAM;
     if let Some(caps) = id_re.captures(url) {
         let file_id = caps.get(1).unwrap().as_str();
         let download_url = format!("https://drive.google.com/uc?id={}&export=download", file_id);
@@ -649,7 +646,7 @@ pub async fn fetch_mediafire(url: &str) -> Result<DownloadResult, ScrapingError>
         .map_err(|e| ScrapingError::Http(format!("MediaFire response read failed: {}", e)))?;
 
     let document = scraper::Html::parse_document(&html);
-    let dl_sel = scraper::Selector::parse(r#"a#downloadButton"#).unwrap();
+    let dl_sel = &*MEDIAFIRE_DOWNLOAD_LINK;
     let download_url = document
         .select(&dl_sel)
         .next()
@@ -657,7 +654,7 @@ pub async fn fetch_mediafire(url: &str) -> Result<DownloadResult, ScrapingError>
         .map(|s| s.to_string());
 
     let title = {
-        let title_sel = scraper::Selector::parse("h1").unwrap();
+        let title_sel = &*H1;
         document
             .select(&title_sel)
             .next()

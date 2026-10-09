@@ -8,6 +8,10 @@ use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
+use super::patterns::{
+    ANCHOR, TWITTER_STATUS_ID, TW_ITEM_BODY, TW_ITEM_VIDEO_LINK, TW_ORIGIN_ITEM, TW_TEXT_LINK,
+    TW_VIDEO, TW_VIDEO_ITEM,
+};
 use super::shared::{playwright_to_download_result, run_playwright_scraper};
 
 /// Twitter/X via the Syndication API (primary method, tokenless, works server-side).
@@ -16,8 +20,7 @@ use super::shared::{playwright_to_download_result, run_playwright_scraper};
 /// Verified: returns real downloadable video.twimg.com MP4s (200/206, video/mp4) — no auth.
 async fn fetch_twitter_syndication(url: &str) -> Result<DownloadResult, ScrapingError> {
     // Extract tweet ID from twitter.com/x.com URL
-    let tweet_id = regex::Regex::new(r"(?:twitter\.com|x\.com)/[^/]+/status/(\d+)")
-        .unwrap()
+    let tweet_id = &TWITTER_STATUS_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
@@ -161,13 +164,11 @@ pub async fn fetch_twitter(url: &str) -> Result<DownloadResult, ScrapingError> {
         Vec::new();
     {
         let document = scraper::Html::parse_document(html);
-        let tw_video_sel = scraper::Selector::parse("div.tw-video").unwrap();
+        let tw_video_sel = &*TW_VIDEO;
 
-        if document.select(&tw_video_sel).next().is_some() {
-            if let Ok(item_sel) =
-                scraper::Selector::parse("div.tw-right > div > p:nth-child(1) > a")
+        if document.select(tw_video_sel).next().is_some() {
             {
-                for item in document.select(&item_sel) {
+                for item in document.select(&*TW_TEXT_LINK) {
                     let quality_text = item.text().collect::<String>();
                     let quality = if quality_text.contains("(") {
                         quality_text
@@ -190,10 +191,10 @@ pub async fn fetch_twitter(url: &str) -> Result<DownloadResult, ScrapingError> {
                 }
             }
         } else {
-            if let Ok(item_sel) = scraper::Selector::parse("div.video-data > div > ul > li") {
-                for item in document.select(&item_sel) {
+            {
+                for item in document.select(&*TW_VIDEO_ITEM) {
                     let href = item
-                        .select(&scraper::Selector::parse("div > div:nth-child(2) > a").unwrap())
+                        .select(&*TW_ITEM_VIDEO_LINK)
                         .next()
                         .and_then(|a| a.value().attr("href"))
                         .map(|s| s.to_string())
@@ -287,11 +288,11 @@ pub async fn fetch_twitter_v2(url: &str) -> Result<DownloadResult, ScrapingError
     let mut result = DownloadResult::success(None);
     result.provider = Some("twitsave".to_string());
 
-    if let Ok(item_sel) = scraper::Selector::parse("div.origin-top-right > ul > li") {
-        for item in document.select(&item_sel) {
-            if let Some(a) = item.select(&scraper::Selector::parse("a").unwrap()).next() {
+    {
+        for item in document.select(&*TW_ORIGIN_ITEM) {
+            if let Some(a) = item.select(&*ANCHOR).next() {
                 let resolution_text = item
-                    .select(&scraper::Selector::parse("div > div > div").unwrap())
+                    .select(&*TW_ITEM_BODY)
                     .next()
                     .map(|d| d.text().collect::<String>())
                     .unwrap_or_default();

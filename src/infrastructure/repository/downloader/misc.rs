@@ -13,6 +13,7 @@ use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
+use super::patterns::DANBOORU_POST_ID;
 use super::shared::run_ytdlp_json;
 use super::social::fetch_snapsave;
 
@@ -342,8 +343,7 @@ pub async fn fetch_videy(url: &str) -> Result<DownloadResult, ScrapingError> {
 
 /// Danbooru — returns direct image URL from post
 pub async fn fetch_danbooru(url: &str) -> Result<DownloadResult, ScrapingError> {
-    let post_id = regex::Regex::new(r"danbooru\.donmai\.us/posts/(\d+)$")
-        .unwrap()
+    let post_id = DANBOORU_POST_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str())

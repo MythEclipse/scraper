@@ -6,6 +6,7 @@
 
 pub mod filehosts;
 pub mod misc;
+pub mod patterns;
 pub mod pinterest;
 pub mod shared;
 pub mod social;

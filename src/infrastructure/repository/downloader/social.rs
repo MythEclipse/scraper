@@ -4,6 +4,7 @@ use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 
 use super::misc::fetch_all_in_one;
+use super::patterns::INSTAGRAM_URL;
 use super::shared::{run_playwright_scraper, run_ytdlp_json, ytdlp_to_download_result};
 
 /// SnapSave parser — extracts Instagram/Facebook media via snapsave.app.
@@ -24,13 +25,10 @@ pub(crate) async fn fetch_snapsave(url: &str) -> Result<DownloadResult, Scraping
     // `facebook.com/watch...` (no subdomain) and `fb.watch/...` entirely.
     let fb_host = r"(?:[a-z0-9-]*\.)?(?:facebook|fb)\.(?:com|watch)";
     let valid_fb = regex::Regex::new(&format!(r"https?://{}(?:/|$)", fb_host))
-        .unwrap()
-        .is_match(url);
-    let valid_ig = url.contains("instagram.com")
-        || url.contains("threads.net")
-        || regex::Regex::new(r"https?://(www\.)?instagram\.com/[^\s]+")
-            .unwrap()
-            .is_match(url);
+        .map(|re| re.is_match(url))
+        .unwrap_or(false);
+    let valid_ig =
+        url.contains("instagram.com") || url.contains("threads.net") || INSTAGRAM_URL.is_match(url);
 
     if !valid_fb && !valid_ig {
         return Ok(DownloadResult::error(

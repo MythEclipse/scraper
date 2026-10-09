@@ -10,6 +10,7 @@ use reqwest::header::CONTENT_TYPE;
 use reqwest::header::USER_AGENT;
 use url::Url;
 
+use super::patterns::THUMB_PATH;
 use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
@@ -45,11 +46,7 @@ pub(super) fn api_headers() -> HeaderMap {
 #[allow(dead_code)]
 pub(super) async fn detect_media_type(url: &str) -> MediaType {
     // thumb paths are images
-    if regex::Regex::new(r"\/thumb(\?|$)")
-        .ok()
-        .map(|r| r.is_match(url))
-        .unwrap_or(false)
-    {
+    if THUMB_PATH.is_match(url) {
         return MediaType::Image;
     }
 
