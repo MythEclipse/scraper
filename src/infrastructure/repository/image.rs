@@ -3,6 +3,11 @@
 //! Ported from Shirokami-API `scraper/image/brat.js`.
 //! brat v2 uses the external brat.siputzx.my.id API (returns image bytes).
 
+use async_trait::async_trait;
+
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::ImageRepository;
+
 use crate::infrastructure::utils::http_client::http_client;
 use reqwest::header::USER_AGENT;
 
@@ -43,4 +48,23 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
         .await
         .map(|b| b.to_vec())
         .map_err(|e| format!("Body: {}", e))
+}
+
+// ============================================================================
+// Port implementation — [`ImageRepository`]
+// ============================================================================
+
+/// Adapter for the [`ImageRepository`] port. Stateless: the module functions above are
+/// already the whole implementation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImageRepositoryImpl;
+
+#[async_trait]
+impl ImageRepository for ImageRepositoryImpl {
+    async fn brat(&self, text: &str) -> Result<Vec<u8>, ScrapingError> {
+        fetch_brat(text).await.map_err(ScrapingError::Http)
+    }
+    async fn brat_animated(&self, text: &str) -> Result<Vec<u8>, ScrapingError> {
+        fetch_brat_animated(text).await.map_err(ScrapingError::Http)
+    }
 }

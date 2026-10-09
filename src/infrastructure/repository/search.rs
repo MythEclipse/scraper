@@ -4,6 +4,11 @@
 //! bmkg (BMKG earthquake), jadwal-sholat (myquran.com), weather (OpenWeather),
 //! google (HTML scrape), yt (via yt-dlp flat-playlist).
 
+use async_trait::async_trait;
+
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::SearchRepository;
+
 use crate::infrastructure::utils::http_client::http_client;
 use reqwest::header::USER_AGENT;
 use scraper::{Html, Selector};
@@ -285,4 +290,32 @@ fn urlencode(s: &str) -> String {
         }
     }
     out
+}
+
+// ============================================================================
+// Port implementation — [`SearchRepository`]
+// ============================================================================
+
+/// Adapter for the [`SearchRepository`] port. Stateless: the module functions above are
+/// already the whole implementation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SearchRepositoryImpl;
+
+#[async_trait]
+impl SearchRepository for SearchRepositoryImpl {
+    async fn bmkg(&self) -> Result<Value, ScrapingError> {
+        fetch_bmkg().await.map_err(ScrapingError::Http)
+    }
+    async fn jadwal_sholat(&self, kota: &str) -> Result<Value, ScrapingError> {
+        fetch_jadwal_sholat(kota).await.map_err(ScrapingError::Http)
+    }
+    async fn weather(&self, city: &str) -> Result<Value, ScrapingError> {
+        fetch_weather(city).await.map_err(ScrapingError::Http)
+    }
+    async fn google(&self, query: &str) -> Result<Value, ScrapingError> {
+        fetch_google(query).await.map_err(ScrapingError::Http)
+    }
+    async fn yt_search(&self, query: &str) -> Result<Value, ScrapingError> {
+        fetch_yt_search(query).await.map_err(ScrapingError::Http)
+    }
 }

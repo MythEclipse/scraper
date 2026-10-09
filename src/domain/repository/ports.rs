@@ -9,6 +9,9 @@
 //! which is what lets the use cases stop importing parsers.
 
 use async_trait::async_trait;
+use serde_json::Value;
+
+use crate::domain::entity::downloader::DownloadResult;
 
 use crate::domain::entity::alqanime::AlqDetailData;
 use crate::domain::entity::anime::{
@@ -144,4 +147,135 @@ pub trait CachePort: Send + Sync {
         F: FnOnce() -> Fut + Send,
         Fut: std::future::Future<Output = Result<T, String>> + Send,
         Self: Sized;
+}
+
+// ============================================================================
+// Single-endpoint ports
+//
+// These mirror the application's public surface one-for-one: each method is an
+// operation a handler asks for, so the port needs no renaming relative to the
+// use case it backs.
+// ============================================================================
+
+/// Profile lookups for social platforms.
+#[async_trait]
+pub trait StalkRepository: Send + Sync {
+    async fn github(&self, username: &str) -> Result<Value, ScrapingError>;
+    async fn youtube(&self, username: &str) -> Result<Value, ScrapingError>;
+    async fn twitter(&self, username: &str) -> Result<Value, ScrapingError>;
+}
+
+/// Public data endpoints that do not belong to a larger domain.
+#[async_trait]
+pub trait MiscRepository: Send + Sync {
+    async fn currency_converter(
+        &self,
+        amount: f64,
+        from: &str,
+        to: &str,
+    ) -> Result<Value, ScrapingError>;
+    async fn harga_emas(&self) -> Result<Value, ScrapingError>;
+    async fn kurs_bca(&self) -> Result<Value, ScrapingError>;
+    async fn server_info(&self) -> Result<Value, ScrapingError>;
+}
+
+/// Image rendering endpoints.
+#[async_trait]
+pub trait ImageRepository: Send + Sync {
+    async fn brat(&self, text: &str) -> Result<Vec<u8>, ScrapingError>;
+    async fn brat_animated(&self, text: &str) -> Result<Vec<u8>, ScrapingError>;
+}
+
+/// Network diagnostics and convenience link tools.
+#[async_trait]
+pub trait ToolsRepository: Send + Sync {
+    async fn whois(&self, domain: &str) -> Result<Value, ScrapingError>;
+    async fn ip_location(&self, ip: &str) -> Result<Value, ScrapingError>;
+    async fn tinyurl(&self, url: &str) -> Result<Value, ScrapingError>;
+    async fn check_hosting(&self, domain: &str) -> Result<Value, ScrapingError>;
+    async fn hargapangan(&self) -> Result<Value, ScrapingError>;
+    async fn cek_resi(
+        &self,
+        resi: String,
+        ekspedisi: Option<String>,
+    ) -> Result<Value, ScrapingError>;
+}
+
+/// General search and public-information queries.
+#[async_trait]
+pub trait SearchRepository: Send + Sync {
+    async fn bmkg(&self) -> Result<Value, ScrapingError>;
+    async fn jadwal_sholat(&self, kota: &str) -> Result<Value, ScrapingError>;
+    async fn weather(&self, city: &str) -> Result<Value, ScrapingError>;
+    async fn google(&self, query: &str) -> Result<Value, ScrapingError>;
+    async fn yt_search(&self, query: &str) -> Result<Value, ScrapingError>;
+}
+
+/// Media download across every supported platform.
+///
+/// `detect_platform` is deliberately absent: it is pure domain logic
+/// (`Platform::detect`), not an I/O port.
+#[async_trait]
+pub trait DownloaderRepository: Send + Sync {
+    async fn download_all_in_one(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_instagram(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_facebook(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_tiktok(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_youtube(
+        &self,
+        url: &str,
+        quality: &str,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_youtube_merge(
+        &self,
+        url: &str,
+        quality: &str,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_youtube_mp3(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_spotify(
+        &self,
+        url: &str,
+        api_key: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_twitter(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_pinterest(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_mega(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_terabox(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_gdrive(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_mediafire(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_pixeldrain(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_threads(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError>;
+    async fn download_doodstream(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_krakenfiles(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_danbooru(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_soundcloud(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_dailymotion(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_reddit(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_streamable(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_videy(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
+    async fn download_bilibili(&self, url: &str) -> Result<DownloadResult, ScrapingError>;
 }

@@ -1,29 +1,37 @@
-//! Application use-cases for search utilities.
+//! Application use cases backed by the [`SearchRepository`] port.
 
-use crate::domain::error::ScrapingError;
-use crate::infrastructure::repository::search as Repo;
 use serde_json::Value;
 
-pub async fn bmkg() -> Result<Value, ScrapingError> {
-    Repo::fetch_bmkg().await.map_err(ScrapingError::Http)
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::SearchRepository;
+
+pub struct SearchUseCases<R: SearchRepository> {
+    repository: R,
 }
 
-pub async fn jadwal_sholat(kota: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_jadwal_sholat(kota)
-        .await
-        .map_err(ScrapingError::Http)
+/// Wires the port implementation chosen by the composition root.
+pub fn new_use_cases<R: SearchRepository>(repository: R) -> SearchUseCases<R> {
+    SearchUseCases { repository }
 }
 
-pub async fn weather(city: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_weather(city).await.map_err(ScrapingError::Http)
-}
+impl<R: SearchRepository> SearchUseCases<R> {
+    pub async fn bmkg(&self) -> Result<Value, ScrapingError> {
+        self.repository.bmkg().await
+    }
 
-pub async fn google(query: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_google(query).await.map_err(ScrapingError::Http)
-}
+    pub async fn jadwal_sholat(&self, kota: &str) -> Result<Value, ScrapingError> {
+        self.repository.jadwal_sholat(kota).await
+    }
 
-pub async fn yt_search(query: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_yt_search(query)
-        .await
-        .map_err(ScrapingError::Http)
+    pub async fn weather(&self, city: &str) -> Result<Value, ScrapingError> {
+        self.repository.weather(city).await
+    }
+
+    pub async fn google(&self, query: &str) -> Result<Value, ScrapingError> {
+        self.repository.google(query).await
+    }
+
+    pub async fn yt_search(&self, query: &str) -> Result<Value, ScrapingError> {
+        self.repository.yt_search(query).await
+    }
 }

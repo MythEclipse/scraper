@@ -3,6 +3,11 @@
 //! Ported from Shirokami-API `scraper/misc/*.js`.
 //! HTML scraping via reqwest + scraper crate.
 
+use async_trait::async_trait;
+
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::MiscRepository;
+
 use crate::infrastructure::utils::http_client::http_client;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
@@ -349,4 +354,36 @@ pub async fn fetch_server_info() -> Result<Value, String> {
 fn format_gb(bytes: u64) -> String {
     let gb = bytes as f64 / 1_073_741_824.0;
     format!("{:.2} GB", gb)
+}
+
+// ============================================================================
+// Port implementation — [`MiscRepository`]
+// ============================================================================
+
+/// Adapter for the [`MiscRepository`] port. Stateless: the module functions above are
+/// already the whole implementation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MiscRepositoryImpl;
+
+#[async_trait]
+impl MiscRepository for MiscRepositoryImpl {
+    async fn currency_converter(
+        &self,
+        amount: f64,
+        from: &str,
+        to: &str,
+    ) -> Result<Value, ScrapingError> {
+        fetch_currency_converter(amount, from, to)
+            .await
+            .map_err(ScrapingError::Http)
+    }
+    async fn harga_emas(&self) -> Result<Value, ScrapingError> {
+        fetch_harga_emas().await.map_err(ScrapingError::Http)
+    }
+    async fn kurs_bca(&self) -> Result<Value, ScrapingError> {
+        fetch_kurs_bca().await.map_err(ScrapingError::Http)
+    }
+    async fn server_info(&self) -> Result<Value, ScrapingError> {
+        fetch_server_info().await.map_err(ScrapingError::Http)
+    }
 }

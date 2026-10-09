@@ -12,8 +12,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::application::downloader as use_cases;
 use crate::domain::error::AppError;
+use crate::presentation::downloader_wiring as use_cases;
 use crate::presentation::dto::downloader::DownloadResponse;
 
 /// Request params for downloader endpoints.
@@ -56,7 +56,7 @@ pub async fn download(
         .unwrap_or(false);
     let result = if merge {
         // All-in-one with merge=true → force merge for YouTube URLs.
-        if crate::application::downloader::detect_platform(&params.url) == "youtube" {
+        if use_cases::detect_platform(&params.url) == "youtube" {
             use_cases::download_youtube_merge(
                 &params.url,
                 params.quality.as_deref().unwrap_or("720"),

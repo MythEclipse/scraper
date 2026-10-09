@@ -1,27 +1,38 @@
-//! Application use-cases for misc utilities.
+//! Application use cases backed by the [`MiscRepository`] port.
 
-use crate::domain::error::ScrapingError;
-use crate::infrastructure::repository::misc as Repo;
 use serde_json::Value;
 
-/// Currency converter.
-pub async fn currency_converter(amount: f64, from: &str, to: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_currency_converter(amount, from, to)
-        .await
-        .map_err(ScrapingError::Http)
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::MiscRepository;
+
+pub struct MiscUseCases<R: MiscRepository> {
+    repository: R,
 }
 
-/// Harga emas Antam.
-pub async fn harga_emas() -> Result<Value, ScrapingError> {
-    Repo::fetch_harga_emas().await.map_err(ScrapingError::Http)
+/// Wires the port implementation chosen by the composition root.
+pub fn new_use_cases<R: MiscRepository>(repository: R) -> MiscUseCases<R> {
+    MiscUseCases { repository }
 }
 
-/// Kurs BCA (jual/beli).
-pub async fn kurs_bca() -> Result<Value, ScrapingError> {
-    Repo::fetch_kurs_bca().await.map_err(ScrapingError::Http)
-}
+impl<R: MiscRepository> MiscUseCases<R> {
+    pub async fn currency_converter(
+        &self,
+        amount: f64,
+        from: &str,
+        to: &str,
+    ) -> Result<Value, ScrapingError> {
+        self.repository.currency_converter(amount, from, to).await
+    }
 
-/// Server info (OS/CPU/RAM/disk).
-pub async fn server_info() -> Result<Value, ScrapingError> {
-    Repo::fetch_server_info().await.map_err(ScrapingError::Http)
+    pub async fn harga_emas(&self) -> Result<Value, ScrapingError> {
+        self.repository.harga_emas().await
+    }
+
+    pub async fn kurs_bca(&self) -> Result<Value, ScrapingError> {
+        self.repository.kurs_bca().await
+    }
+
+    pub async fn server_info(&self) -> Result<Value, ScrapingError> {
+        self.repository.server_info().await
+    }
 }

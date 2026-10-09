@@ -1,5 +1,11 @@
+pub mod downloader_wiring;
 pub mod dto;
 pub mod error;
 pub mod handler;
+pub mod image_wiring;
 pub mod middleware;
+pub mod misc_wiring;
 pub mod router;
+pub mod search_wiring;
+pub mod stalk_wiring;
+pub mod tools_wiring;

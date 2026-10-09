@@ -4,6 +4,8 @@
 //! implementations live in sibling modules grouped by the extraction strategy
 //! they share; this file is the public façade and the all-in-one dispatcher.
 
+use async_trait::async_trait;
+
 pub mod filehosts;
 pub mod misc;
 pub mod patterns;
@@ -245,5 +247,124 @@ impl DownloaderRepository {
 impl Default for DownloaderRepository {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// Port implementation — [`DownloaderRepository`]
+// ============================================================================
+
+#[async_trait]
+impl crate::domain::repository::DownloaderRepository for DownloaderRepository {
+    async fn download_all_in_one(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_all_in_one(url, cookies).await
+    }
+    async fn download_instagram(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_instagram(url, cookies).await
+    }
+    async fn download_facebook(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_facebook(url, cookies).await
+    }
+    async fn download_tiktok(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_tiktok(url, cookies).await
+    }
+    async fn download_youtube(
+        &self,
+        url: &str,
+        quality: &str,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_youtube(url, quality).await
+    }
+    async fn download_youtube_merge(
+        &self,
+        url: &str,
+        quality: &str,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::fetch_youtube_merge(url, quality).await
+    }
+    async fn download_youtube_mp3(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_youtube_mp3(url).await
+    }
+    async fn download_spotify(
+        &self,
+        url: &str,
+        api_key: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_spotify(url, api_key).await
+    }
+    async fn download_twitter(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_twitter(url, cookies).await
+    }
+    async fn download_pinterest(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_pinterest(url).await
+    }
+    async fn download_mega(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_mega(url).await
+    }
+    async fn download_terabox(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_terabox(url).await
+    }
+    async fn download_gdrive(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_gdrive(url).await
+    }
+    async fn download_mediafire(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_mediafire(url).await
+    }
+    async fn download_pixeldrain(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_pixeldrain(url).await
+    }
+    async fn download_threads(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+    ) -> Result<DownloadResult, ScrapingError> {
+        Self::download_threads(url, cookies).await
+    }
+    async fn download_doodstream(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_doodstream(url).await
+    }
+    async fn download_krakenfiles(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_krakenfiles(url).await
+    }
+    async fn download_danbooru(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_danbooru(url).await
+    }
+    async fn download_soundcloud(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_soundcloud(url).await
+    }
+    async fn download_dailymotion(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_dailymotion(url).await
+    }
+    async fn download_reddit(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_reddit(url).await
+    }
+    async fn download_streamable(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_streamable(url).await
+    }
+    async fn download_videy(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_videy(url).await
+    }
+    async fn download_bilibili(&self, url: &str) -> Result<DownloadResult, ScrapingError> {
+        Self::download_bilibili(url).await
     }
 }

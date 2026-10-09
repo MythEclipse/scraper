@@ -11,8 +11,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use utoipa::IntoParams;
 
-use crate::application::stalk as use_cases;
 use crate::domain::error::AppError;
+use crate::presentation::stalk_wiring as use_cases;
 
 /// Query params for stalk endpoints.
 #[derive(Deserialize, IntoParams)]

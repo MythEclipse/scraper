@@ -3,6 +3,11 @@
 //! Ported from Shirokami-API `scraper/tool/*.js` and `scraper/tool/*.js`:
 //! whois, ip-location, tinyurl, check-hosting, cek-resi, hargapangan.
 
+use async_trait::async_trait;
+
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::ToolsRepository;
+
 use crate::infrastructure::utils::http_client::http_client;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
@@ -434,5 +439,44 @@ pub async fn fetch_cek_resi(noresi: &str, ekspedisi: Option<&str>) -> Result<Val
             .map(|e| e.text().collect::<String>().trim().to_string())
             .unwrap_or_else(|| "Tidak dapat mengambil informasi resi".to_string());
         Ok(json!({"success": false, "message": message}))
+    }
+}
+
+// ============================================================================
+// Port implementation — [`ToolsRepository`]
+// ============================================================================
+
+/// Adapter for the [`ToolsRepository`] port. Stateless: the module functions above are
+/// already the whole implementation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ToolsRepositoryImpl;
+
+#[async_trait]
+impl ToolsRepository for ToolsRepositoryImpl {
+    async fn whois(&self, domain: &str) -> Result<Value, ScrapingError> {
+        fetch_whois(domain).await.map_err(ScrapingError::Http)
+    }
+    async fn ip_location(&self, ip: &str) -> Result<Value, ScrapingError> {
+        fetch_ip_location(ip).await.map_err(ScrapingError::Http)
+    }
+    async fn tinyurl(&self, url: &str) -> Result<Value, ScrapingError> {
+        fetch_tinyurl(url).await.map_err(ScrapingError::Http)
+    }
+    async fn check_hosting(&self, domain: &str) -> Result<Value, ScrapingError> {
+        fetch_check_hosting(domain)
+            .await
+            .map_err(ScrapingError::Http)
+    }
+    async fn hargapangan(&self) -> Result<Value, ScrapingError> {
+        fetch_hargapangan().await.map_err(ScrapingError::Http)
+    }
+    async fn cek_resi(
+        &self,
+        resi: String,
+        ekspedisi: Option<String>,
+    ) -> Result<Value, ScrapingError> {
+        fetch_cek_resi(&resi, ekspedisi.as_deref())
+            .await
+            .map_err(ScrapingError::Http)
     }
 }

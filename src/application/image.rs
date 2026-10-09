@@ -1,14 +1,23 @@
-//! Application use-cases for image generation.
+//! Application use cases backed by the [`ImageRepository`] port.
 
 use crate::domain::error::ScrapingError;
-use crate::infrastructure::repository::image as Repo;
+use crate::domain::repository::ImageRepository;
 
-pub async fn brat(text: &str) -> Result<Vec<u8>, ScrapingError> {
-    Repo::fetch_brat(text).await.map_err(ScrapingError::Http)
+pub struct ImageUseCases<R: ImageRepository> {
+    repository: R,
 }
 
-pub async fn brat_animated(text: &str) -> Result<Vec<u8>, ScrapingError> {
-    Repo::fetch_brat_animated(text)
-        .await
-        .map_err(ScrapingError::Http)
+/// Wires the port implementation chosen by the composition root.
+pub fn new_use_cases<R: ImageRepository>(repository: R) -> ImageUseCases<R> {
+    ImageUseCases { repository }
+}
+
+impl<R: ImageRepository> ImageUseCases<R> {
+    pub async fn brat(&self, text: &str) -> Result<Vec<u8>, ScrapingError> {
+        self.repository.brat(text).await
+    }
+
+    pub async fn brat_animated(&self, text: &str) -> Result<Vec<u8>, ScrapingError> {
+        self.repository.brat_animated(text).await
+    }
 }

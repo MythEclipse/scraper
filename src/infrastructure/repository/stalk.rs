@@ -2,6 +2,11 @@
 //!
 //! Ported from Shirokami-API `scraper/stalk/*.js`.
 
+use async_trait::async_trait;
+
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::StalkRepository;
+
 use crate::infrastructure::utils::http_client::http_client;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
@@ -455,4 +460,32 @@ pub async fn fetch_twitter_stalk(username: &str) -> Result<Value, String> {
             "website": u.get("website").cloned().unwrap_or(Value::Null),
         }
     }))
+}
+
+// ============================================================================
+// Port implementation — [`StalkRepository`]
+// ============================================================================
+
+/// Adapter for the [`StalkRepository`] port. Stateless: the module functions above are
+/// already the whole implementation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StalkRepositoryImpl;
+
+#[async_trait]
+impl StalkRepository for StalkRepositoryImpl {
+    async fn github(&self, username: &str) -> Result<Value, ScrapingError> {
+        fetch_github_stalk(username)
+            .await
+            .map_err(ScrapingError::Http)
+    }
+    async fn youtube(&self, username: &str) -> Result<Value, ScrapingError> {
+        fetch_youtube_stalk(username)
+            .await
+            .map_err(ScrapingError::Http)
+    }
+    async fn twitter(&self, username: &str) -> Result<Value, ScrapingError> {
+        fetch_twitter_stalk(username)
+            .await
+            .map_err(ScrapingError::Http)
+    }
 }

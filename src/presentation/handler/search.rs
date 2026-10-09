@@ -10,8 +10,8 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::application::search as use_cases;
 use crate::domain::error::AppError;
+use crate::presentation::search_wiring as use_cases;
 
 #[derive(Deserialize)]
 pub struct SearchParams {

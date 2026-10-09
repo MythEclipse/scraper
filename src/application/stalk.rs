@@ -1,26 +1,29 @@
-//! Application use-cases for stalk (profile/user lookups).
+//! Application use cases backed by the [`StalkRepository`] port.
 
-use crate::domain::error::ScrapingError;
-use crate::infrastructure::repository::stalk as Repo;
 use serde_json::Value;
 
-/// GitHub user profile stalk.
-pub async fn github(username: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_github_stalk(username)
-        .await
-        .map_err(ScrapingError::Http)
+use crate::domain::error::ScrapingError;
+use crate::domain::repository::StalkRepository;
+
+pub struct StalkUseCases<R: StalkRepository> {
+    repository: R,
 }
 
-/// YouTube channel/profile stalk.
-pub async fn youtube(username: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_youtube_stalk(username)
-        .await
-        .map_err(ScrapingError::Http)
+/// Wires the port implementation chosen by the composition root.
+pub fn new_use_cases<R: StalkRepository>(repository: R) -> StalkUseCases<R> {
+    StalkUseCases { repository }
 }
 
-/// Twitter/X user stalk.
-pub async fn twitter(username: &str) -> Result<Value, ScrapingError> {
-    Repo::fetch_twitter_stalk(username)
-        .await
-        .map_err(ScrapingError::Http)
+impl<R: StalkRepository> StalkUseCases<R> {
+    pub async fn github(&self, username: &str) -> Result<Value, ScrapingError> {
+        self.repository.github(username).await
+    }
+
+    pub async fn youtube(&self, username: &str) -> Result<Value, ScrapingError> {
+        self.repository.youtube(username).await
+    }
+
+    pub async fn twitter(&self, username: &str) -> Result<Value, ScrapingError> {
+        self.repository.twitter(username).await
+    }
 }
