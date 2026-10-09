@@ -110,12 +110,8 @@ impl Anime2UseCases {
         Self { repository }
     }
 
-    fn cache(&self) -> Cache {
-        Cache::new()
-    }
-
     pub async fn index(&self) -> Result<Anime2Response, DomainError> {
-        self.cache()
+        Cache
             .get_or_set("anime2:index", INDEX_CACHE_TTL, || async {
                 let ongoing_html = self
                     .repository
@@ -177,7 +173,7 @@ impl Anime2UseCases {
     }
 
     pub async fn genre_list(&self) -> Result<GenresResponse, DomainError> {
-        self.cache()
+        Cache
             .get_or_set("anime2:genres:list:v3", GENRE_LIST_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -216,7 +212,7 @@ impl Anime2UseCases {
         let status_clone = status.clone();
         let anime_type_clone = anime_type.clone();
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, FILTER_CACHE_TTL, || async {
                 let mut url = self.repository.filter_url(page, &order);
 
@@ -263,7 +259,7 @@ impl Anime2UseCases {
     pub async fn detail(&self, slug: String) -> Result<DetailResponse, DomainError> {
         let cache_key = format!("anime2:detail:{}", slug);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, DETAIL_CACHE_TTL, || async {
                 let detail_url = self.repository.detail_url(&slug);
                 let detail_html = self
@@ -325,7 +321,7 @@ impl Anime2UseCases {
     ) -> Result<Vec<GenreAnimeItem>, DomainError> {
         let cache_key = format!("anime2:genre:{}:{}", genre_slug, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -351,7 +347,7 @@ impl Anime2UseCases {
     ) -> Result<Vec<SearchAnimeItem>, DomainError> {
         let cache_key = format!("anime2:search:{}:{}", query, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, SEARCH_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -373,7 +369,7 @@ impl Anime2UseCases {
     pub async fn latest(&self, page: u32) -> Result<Vec<LatestAnimeItem>, DomainError> {
         let cache_key = format!("anime2:latest:{}", page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, LATEST_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -398,7 +394,7 @@ impl Anime2UseCases {
     ) -> Result<Vec<OngoingAnimeItemWithScore>, DomainError> {
         let cache_key = format!("anime2:ongoing:{}", page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, ONGOING_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -420,7 +416,7 @@ impl Anime2UseCases {
     pub async fn complete_anime(&self, page: u32) -> Result<Vec<CompleteAnimeItem>, DomainError> {
         let cache_key = format!("anime2:complete:{}", page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, COMPLETE_CACHE_TTL, || async {
                 let html = self
                     .repository

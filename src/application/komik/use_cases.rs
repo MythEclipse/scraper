@@ -34,12 +34,8 @@ impl KomikUseCases {
         Self { repository }
     }
 
-    fn cache(&self) -> Cache {
-        Cache::new()
-    }
-
     pub async fn genre_list(&self) -> Result<Vec<KomikGenre>, DomainError> {
-        self.cache()
+        Cache
             .get_or_set("komik:genres:list:v3", GENRE_LIST_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -64,7 +60,7 @@ impl KomikUseCases {
         let page = 1u32;
         let cache_key = format!("komik:genre:{}:{}:v2", genre_slug, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
                 let url = self.repository.genre_url(&genre_slug, page);
                 let html = self
@@ -92,7 +88,7 @@ impl KomikUseCases {
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:genre:{}:{}:v2", genre_slug, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
                 let url = self.repository.genre_url(&genre_slug, page);
                 let html = self
@@ -116,7 +112,7 @@ impl KomikUseCases {
     pub async fn detail_slug(&self, komik_id: String) -> Result<DetailData, DomainError> {
         let cache_key = format!("komik:detail:{}", komik_id);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, DETAIL_CACHE_TTL, || async {
                 let url = self.repository.detail_url(&komik_id);
                 let html = self
@@ -140,7 +136,7 @@ impl KomikUseCases {
     pub async fn chapter_slug(&self, chapter_url: String) -> Result<ChapterData, DomainError> {
         let cache_key = format!("komik:chapter:{}", chapter_url);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, CHAPTER_CACHE_TTL, || async {
                 let url = self.repository.chapter_url(&chapter_url);
                 let html = self
@@ -215,7 +211,7 @@ impl KomikUseCases {
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:list:{}:{}:v2", list_name, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
                 let html = self
                     .repository
@@ -246,7 +242,7 @@ impl KomikUseCases {
         let page = 1u32;
         let cache_key = format!("komik:search:{}:{}", query, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, SEARCH_CACHE_TTL, || async {
                 let url = self.repository.search_url(&query, page);
                 let html = self
@@ -274,7 +270,7 @@ impl KomikUseCases {
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:search:{}:{}", query, page);
 
-        self.cache()
+        Cache
             .get_or_set(&cache_key, SEARCH_CACHE_TTL, || async {
                 let url = self.repository.search_url(&query, page);
                 let html = self

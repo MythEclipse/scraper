@@ -8,7 +8,7 @@ use crate::domain::entity::anime::{
     LatestAnimeItem, OngoingAnimeListItem, Pagination, SearchAnimeItem,
 };
 use crate::domain::error::ScrapingError;
-use crate::domain::repository::ScrapingRepository;
+use crate::domain::repository::{OtakudesuAnimeRepository, ScrapingRepository};
 use crate::infrastructure::repository::parsers::otakudesu_parser;
 use crate::infrastructure::scraping::html_fetcher::fetch_html_with_retry;
 use crate::infrastructure::scraping::proxy_fetch::fetch_with_proxy;
@@ -230,5 +230,53 @@ impl OtakudesuRepository {
         retry(backoff, retry_all, fetch_op)
             .await
             .map_err(|e| ScrapingError::Http(e.to_string()))
+    }
+}
+
+#[async_trait]
+impl OtakudesuAnimeRepository for OtakudesuRepository {
+    async fn fetch_anime_index(&self) -> Result<AnimeData, ScrapingError> {
+        OtakudesuRepository::fetch_anime_index(self).await
+    }
+    async fn fetch_genres(&self) -> Result<Vec<Genre>, ScrapingError> {
+        OtakudesuRepository::fetch_genres(self).await
+    }
+    async fn fetch_anime_detail(&self, slug: &str) -> Result<AnimeDetailData, ScrapingError> {
+        OtakudesuRepository::fetch_anime_detail(self, slug).await
+    }
+    async fn fetch_complete_anime_page(
+        &self,
+        slug: &str,
+    ) -> Result<(Vec<CompleteAnimeListItem>, Pagination), ScrapingError> {
+        OtakudesuRepository::fetch_complete_anime_page(self, slug).await
+    }
+    async fn fetch_ongoing_anime_page(
+        &self,
+        slug: &str,
+    ) -> Result<(Vec<OngoingAnimeListItem>, Pagination), ScrapingError> {
+        OtakudesuRepository::fetch_ongoing_anime_page(self, slug).await
+    }
+    async fn fetch_latest_anime_page(
+        &self,
+        slug: &str,
+    ) -> Result<(Vec<LatestAnimeItem>, Pagination), ScrapingError> {
+        OtakudesuRepository::fetch_latest_anime_page(self, slug).await
+    }
+    async fn fetch_search_anime_page(
+        &self,
+        slug: &str,
+        page: &str,
+    ) -> Result<(Vec<SearchAnimeItem>, Pagination), ScrapingError> {
+        OtakudesuRepository::fetch_search_anime_page(self, slug, page).await
+    }
+    async fn fetch_genre_anime_page(
+        &self,
+        genre_slug: &str,
+        page: &str,
+    ) -> Result<(Vec<GenreAnimeItem>, Pagination), ScrapingError> {
+        OtakudesuRepository::fetch_genre_anime_page(self, genre_slug, page).await
+    }
+    async fn fetch_anime_full(&self, slug: &str) -> Result<AnimeFullData, ScrapingError> {
+        OtakudesuRepository::fetch_anime_full(self, slug).await
     }
 }

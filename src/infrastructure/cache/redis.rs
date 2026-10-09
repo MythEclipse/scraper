@@ -128,3 +128,16 @@ impl Cache {
 pub fn cache_key(prefix: &str, id: &str) -> String {
     format!("{}:{}", prefix, id)
 }
+
+#[async_trait::async_trait]
+impl crate::domain::repository::CachePort for Cache {
+    async fn get_or_set<T, F, Fut>(&self, key: &str, ttl_secs: u64, compute: F) -> Result<T, String>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + Sync,
+        F: FnOnce() -> Fut + Send,
+        Fut: std::future::Future<Output = Result<T, String>> + Send,
+        Self: Sized,
+    {
+        Cache::get_or_set(self, key, ttl_secs, compute).await
+    }
+}

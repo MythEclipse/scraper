@@ -8,7 +8,7 @@ use serde::Serialize;
 use tracing::info;
 use utoipa::ToSchema;
 
-use crate::application::anime::use_cases::AnimeUseCases;
+use crate::application::anime::use_cases::{new_use_cases, AnimeUseCases};
 use crate::domain::entity::anime::*;
 use crate::domain::error::AppError;
 use crate::infrastructure::repository::OtakudesuRepository;
@@ -76,8 +76,8 @@ pub struct GenreListResponse {
 // Helper
 // ============================================================================
 
-fn make_use_cases() -> AnimeUseCases {
-    AnimeUseCases::new(OtakudesuRepository::new())
+fn make_use_cases() -> AnimeUseCases<OtakudesuRepository> {
+    new_use_cases(OtakudesuRepository::new())
 }
 
 // ============================================================================
