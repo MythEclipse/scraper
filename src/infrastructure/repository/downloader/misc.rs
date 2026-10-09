@@ -112,15 +112,12 @@ pub async fn fetch_all_in_one(url: &str) -> Result<DownloadResult, ScrapingError
                     .get("quality")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
-                file_type: m
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .and_then(|t| match t {
-                        "video" => Some(MediaType::Video),
-                        "audio" => Some(MediaType::Audio),
-                        "image" => Some(MediaType::Image),
-                        _ => Some(MediaType::File),
-                    }),
+                file_type: m.get("type").and_then(|v| v.as_str()).map(|t| match t {
+                    "video" => MediaType::Video,
+                    "audio" => MediaType::Audio,
+                    "image" => MediaType::Image,
+                    _ => MediaType::File,
+                }),
                 extension: m
                     .get("extension")
                     .and_then(|v| v.as_str())

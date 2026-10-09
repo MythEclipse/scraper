@@ -82,6 +82,12 @@ impl AlqanimeRepository {
     }
 }
 
+impl Default for AlqanimeRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ScrapingRepository for AlqanimeRepository {
     async fn fetch_html(&self, url: &str) -> Result<String, ScrapingError> {

@@ -72,11 +72,10 @@ pub async fn fetch_jadwal_sholat(kota: &str) -> Result<Value, String> {
         urlencode(kota)
     );
     let city_data = get_json(&search_url).await?;
-    if city_data
+    if !city_data
         .get("status")
         .and_then(|s| s.as_bool())
         .unwrap_or(false)
-        != true
     {
         return Ok(json!({ "error": "Kota tidak ditemukan" }));
     }

@@ -315,7 +315,7 @@ pub async fn fetch_tiktok(url: &str) -> Result<DownloadResult, ScrapingError> {
             if result.media.is_empty() {
                 result.message = Some("No download URLs found".to_string());
             }
-            return Ok(result);
+            Ok(result)
         }
         Err(e) => {
             eprintln!("yt-dlp failed for TikTok, trying Playwright: {}", e);
@@ -342,12 +342,10 @@ pub async fn fetch_tiktok(url: &str) -> Result<DownloadResult, ScrapingError> {
                                     .unwrap_or("")
                                     .to_string(),
                                 quality: None,
-                                file_type: m.get("ext").and_then(|v| v.as_str()).and_then(|e| {
-                                    match e {
-                                        "mp4" | "m3u8" => Some(MediaType::Video),
-                                        "mp3" | "m4a" => Some(MediaType::Audio),
-                                        _ => Some(MediaType::Video),
-                                    }
+                                file_type: m.get("ext").and_then(|v| v.as_str()).map(|e| match e {
+                                    "mp4" | "m3u8" => MediaType::Video,
+                                    "mp3" | "m4a" => MediaType::Audio,
+                                    _ => MediaType::Video,
                                 }),
                                 extension: m
                                     .get("ext")
@@ -367,17 +365,17 @@ pub async fn fetch_tiktok(url: &str) -> Result<DownloadResult, ScrapingError> {
                     if result.media.is_empty() {
                         result.message = Some("No download URLs found".to_string());
                     }
-                    return Ok(result);
+                    Ok(result)
                 }
                 Err(_) => {
                     // Last resort: douyin.wtf hybrid API (v2). If it also fails,
                     // report all methods exhausted.
                     match fetch_tiktok_v2(url).await {
-                        Ok(v2_result) if !v2_result.media.is_empty() => return Ok(v2_result),
+                        Ok(v2_result) if !v2_result.media.is_empty() => Ok(v2_result),
                         _ => {
-                            return Err(ScrapingError::Http(
+                            Err(ScrapingError::Http(
                                 "All TikTok download methods failed (tikwm, yt-dlp, Playwright, embed, douyin.wtf)".to_string()
-                            ));
+                            ))
                         }
                     }
                 }

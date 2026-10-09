@@ -33,8 +33,9 @@ static GENRE_SELECTOR: LazyLock<scraper::Selector> =
 static CHAPTER_LINK_SELECTOR: LazyLock<scraper::Selector> =
     LazyLock::new(|| selector("td.judulseries a").unwrap());
 static CHAPTER_TITLE_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)(?:chapter|ch\.?)\s*([\d\.]+)").unwrap());
-static CHAPTER_NUMBER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([\d\.]+)").unwrap());
+    LazyLock::new(|| Regex::new(r"(?i)(?:chapter|ch\.?)\s*([\d\.]+)").expect("literal regex"));
+static CHAPTER_NUMBER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([\d\.]+)").expect("literal regex"));
 
 pub fn parse_genres(html: &str) -> Result<Vec<KomikGenre>, ScrapingError> {
     let document = parse_html(html);
@@ -117,8 +118,7 @@ pub fn parse_komik_chapter_document(
         .map(|href| {
             href.trim_end_matches('/')
                 .split('/')
-                .filter(|s| !s.is_empty())
-                .next_back()
+                .rfind(|s| !s.is_empty())
                 .unwrap_or("")
                 .to_string()
         })
@@ -163,8 +163,7 @@ pub fn parse_komik_chapter_document(
             .map(|href| {
                 href.trim_end_matches('/')
                     .split('/')
-                    .filter(|s| !s.is_empty())
-                    .next_back()
+                    .rfind(|s| !s.is_empty())
                     .unwrap_or("")
                     .to_string()
             })
@@ -276,7 +275,7 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
     let chapter_link_selector = &*CHAPTER_LINK_SELECTOR;
 
     let title = document
-        .select(&title_selector)
+        .select(title_selector)
         .next()
         .map(|e| {
             let text = clean_text(text(&e));
@@ -289,12 +288,12 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         })
         .or_else(|| {
             document
-                .select(&h1_selector)
+                .select(h1_selector)
                 .next()
                 .map(|e| clean_text(text(&e)))
         })
         .or_else(|| {
-            document.select(&title_tag_selector).next().map(|e| {
+            document.select(title_tag_selector).next().map(|e| {
                 let text = clean_text(text(&e));
                 if text.contains("Komik ") {
                     text.replace("Komik ", "").trim().to_string()
@@ -305,7 +304,7 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         })
         .unwrap_or_default();
 
-    let info_rows_vec: Vec<scraper::ElementRef> = document.select(&info_row_selector).collect();
+    let info_rows_vec: Vec<scraper::ElementRef> = document.select(info_row_selector).collect();
     let info_rows = &info_rows_vec[..];
 
     let status = info_rows
@@ -373,14 +372,14 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         .unwrap_or_default();
 
     let poster = document
-        .select(&poster_selector)
+        .select(poster_selector)
         .next()
         .and_then(|e| attr(&e, "src"))
         .map(|s| s.split('?').next().unwrap_or(&s).to_string())
         .unwrap_or_default();
 
     let description = document
-        .select(&desc_selector)
+        .select(desc_selector)
         .map(|e| clean_text(text(&e)))
         .filter(|t| t.len() > 50)
         .collect::<Vec<String>>()
@@ -392,16 +391,16 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         .map(clean_text)
         .unwrap_or_else(|| {
             document
-                .select(&chapter_list_selector)
+                .select(chapter_list_selector)
                 .next_back()
-                .and_then(|last| last.select(&date_link_selector).next())
+                .and_then(|last| last.select(date_link_selector).next())
                 .map(|e| clean_text(text(&e)))
                 .unwrap_or_default()
         });
 
     let total_chapter = find_table_row_with_text(info_rows, &["total chapter", "total chapters"])
         .unwrap_or_else(|| {
-            let count = document.select(&chapter_list_selector).count();
+            let count = document.select(chapter_list_selector).count();
             if count > 0 {
                 count.to_string()
             } else {
@@ -411,22 +410,22 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
 
     let updated_on = find_table_row_with_text(info_rows, &["diperbarui", "updated"])
         .or_else(|| {
-            document.select(&judul2_selector).next().map(|e| {
+            document.select(judul2_selector).next().map(|e| {
                 let text_str = clean_text(text(&e));
                 text_str.split("• ").nth(1).unwrap_or("").trim().to_string()
             })
         })
         .unwrap_or_else(|| {
             document
-                .select(&chapter_list_selector)
+                .select(chapter_list_selector)
                 .next()
-                .and_then(|first| first.select(&date_link_selector).next())
+                .and_then(|first| first.select(date_link_selector).next())
                 .map(|e| clean_text(text(&e)))
                 .unwrap_or_default()
         });
 
     let mut genres = Vec::new();
-    for element in document.select(&genre_selector) {
+    for element in document.select(genre_selector) {
         let genre = clean_text(text(&element));
         if !genre.is_empty() {
             genres.push(genre);
@@ -434,10 +433,10 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
     }
 
     let raw_chapter_data: Vec<(String, String, String)> = document
-        .select(&chapter_list_selector)
+        .select(chapter_list_selector)
         .filter_map(|el| {
-            let chapter_link_element = el.select(&chapter_link_selector).next();
-            let date_element = el.select(&date_link_selector).next();
+            let chapter_link_element = el.select(chapter_link_selector).next();
+            let date_element = el.select(date_link_selector).next();
 
             let chapter_text = chapter_link_element
                 .as_ref()
@@ -482,8 +481,7 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
 
             let chapter_id = href_text
                 .split('/')
-                .filter(|s| !s.is_empty())
-                .next_back()
+                .rfind(|s| !s.is_empty())
                 .unwrap_or("")
                 .to_string();
 

@@ -191,7 +191,7 @@ fn decrypt_aes_128_cbc(key: &[u8], _iv: &[u8], enc: &str) -> Option<String> {
     let cipher = Aes128::new_from_slice(key).ok()?;
 
     let mut result = Vec::new();
-    for chunk in data.chunks_exact(16) {
+    for chunk in data.as_chunks::<16>().0 {
         let mut block = [0u8; 16];
         block.copy_from_slice(chunk);
         if let Ok(_) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -371,7 +371,7 @@ pub async fn fetch_terabox(url: &str) -> Result<DownloadResult, ScrapingError> {
 }
 
 pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError> {
-    let id = &*PIXELDRAIN_ID
+    let id = PIXELDRAIN_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str())
@@ -442,14 +442,14 @@ pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError
     let chars: String = (0..10)
         .map(|_| {
             let idx = fastrand::usize(..62);
-            let c = if idx < 26 {
+
+            if idx < 26 {
                 (b'A' + idx as u8) as char
             } else if idx < 52 {
                 (b'a' + (idx - 26) as u8) as char
             } else {
                 (b'0' + (idx - 52) as u8) as char
-            };
-            c
+            }
         })
         .collect();
 
@@ -465,7 +465,7 @@ pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError
         .await
         .map_err(|e| ScrapingError::Http(format!("DoodStream DS read failed: {}", e)))?;
 
-    let _cm = cdn_path.split('/').last().unwrap_or("");
+    let _cm = cdn_path.split('/').next_back().unwrap_or("");
 
     let expiry = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -507,7 +507,7 @@ pub async fn fetch_doodstream(url: &str) -> Result<DownloadResult, ScrapingError
 
 pub async fn fetch_krakenfiles(url: &str) -> Result<DownloadResult, ScrapingError> {
     // Parse file ID from krakenfiles.com URL
-    let file_id = &*KRAKENFILES_ID
+    let file_id = KRAKENFILES_ID
         .captures(url)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str())
@@ -648,7 +648,7 @@ pub async fn fetch_mediafire(url: &str) -> Result<DownloadResult, ScrapingError>
     let document = scraper::Html::parse_document(&html);
     let dl_sel = &*MEDIAFIRE_DOWNLOAD_LINK;
     let download_url = document
-        .select(&dl_sel)
+        .select(dl_sel)
         .next()
         .and_then(|el| el.value().attr("href"))
         .map(|s| s.to_string());
@@ -656,7 +656,7 @@ pub async fn fetch_mediafire(url: &str) -> Result<DownloadResult, ScrapingError>
     let title = {
         let title_sel = &*H1;
         document
-            .select(&title_sel)
+            .select(title_sel)
             .next()
             .map(|el| el.text().collect::<String>())
     };

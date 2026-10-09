@@ -67,6 +67,12 @@ impl KomikRepository {
     }
 }
 
+impl Default for KomikRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ScrapingRepository for KomikRepository {
     async fn fetch_html(&self, url: &str) -> Result<String, ScrapingError> {

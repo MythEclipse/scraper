@@ -189,15 +189,19 @@ pub(super) async fn run_ytdlp_json(
                 .spawn()
                 .map_err(|e| ScrapingError::Http(format!("yt-dlp spawn failed: {}", e)))?;
 
-            let stdout_file = child.stdout.take().unwrap();
-            let stderr_file = child.stderr.take().unwrap();
+            // `Stdio::piped()` above guarantees both handles are present; treat a
+            // missing one as an error rather than panicking inside a request.
             let mut stdout_str = String::new();
             let mut stderr_str = String::new();
-            use std::io::Read;
-            let mut stdout_handle = stdout_file;
-            stdout_handle.read_to_string(&mut stdout_str).unwrap_or_default();
-            let mut stderr_handle = stderr_file;
-            stderr_handle.read_to_string(&mut stderr_str).unwrap_or_default();
+            {
+                use std::io::Read;
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_string(&mut stdout_str);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut stderr_str);
+                }
+            }
             let status = child.wait().map_err(|e| ScrapingError::Http(format!("yt-dlp wait failed: {}", e)))?;
 
             Ok((stdout_str, stderr_str, status.code()))
@@ -325,10 +329,10 @@ pub(super) fn playwright_to_download_result(data: &serde_json::Value) -> Downloa
                     .unwrap_or("")
                     .to_string(),
                 quality: None,
-                file_type: m.get("ext").and_then(|v| v.as_str()).and_then(|e| match e {
-                    "mp4" | "m3u8" => Some(MediaType::Video),
-                    "mp3" | "m4a" => Some(MediaType::Audio),
-                    _ => Some(MediaType::Video),
+                file_type: m.get("ext").and_then(|v| v.as_str()).map(|e| match e {
+                    "mp4" | "m3u8" => MediaType::Video,
+                    "mp3" | "m4a" => MediaType::Audio,
+                    _ => MediaType::Video,
                 }),
                 extension: m.get("ext").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 thumbnail: None,

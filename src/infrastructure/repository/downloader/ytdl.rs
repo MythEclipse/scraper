@@ -35,10 +35,12 @@ pub async fn fetch_bilibili(url: &str) -> Result<DownloadResult, ScrapingError> 
     // Extract media from formats array
     if let Some(formats) = data.get("formats").and_then(|v| v.as_array()) {
         for fmt in formats {
-            let url = fmt.get("url").and_then(|v| v.as_str());
-            if url.is_some() {
+            let Some(url) = fmt.get("url").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            {
                 result.media.push(MediaItem {
-                    url: url.unwrap().to_string(),
+                    url: url.to_string(),
                     quality: fmt
                         .get("format_note")
                         .and_then(|v| v.as_str())

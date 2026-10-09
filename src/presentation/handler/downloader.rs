@@ -394,13 +394,13 @@ pub async fn proxy_terabox(
 
     let stream = resp.bytes_stream();
 
-    Ok(axum::response::Response::builder()
+    axum::response::Response::builder()
         .header("Content-Type", content_type)
         .header("Content-Disposition", content_disposition)
         .header("X-Accel-Buffering", "no")
         .header("Cache-Control", "no-store")
         .body(axum::body::Body::from_stream(stream))
-        .map_err(|e| AppError::Internal(format!("build stream response: {e}")))?)
+        .map_err(|e| AppError::Internal(format!("build stream response: {e}")))
 }
 
 /// Params for the TeraBox streaming proxy.
@@ -731,7 +731,7 @@ pub async fn serve_merged_file(
         "application/octet-stream"
     };
 
-    Ok(axum::response::Response::builder()
+    axum::response::Response::builder()
         .header("Content-Type", content_type)
         .header("Content-Length", bytes.len().to_string())
         .header(
@@ -739,7 +739,7 @@ pub async fn serve_merged_file(
             format!("attachment; filename=\"{filename}\""),
         )
         .body(axum::body::Body::from(bytes))
-        .map_err(|e| AppError::Internal(format!("build response: {e}")))?)
+        .map_err(|e| AppError::Internal(format!("build response: {e}")))
 }
 
 /// Downloader routes.

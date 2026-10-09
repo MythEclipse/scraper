@@ -168,7 +168,7 @@ pub async fn fetch_twitter(url: &str) -> Result<DownloadResult, ScrapingError> {
 
         if document.select(tw_video_sel).next().is_some() {
             {
-                for item in document.select(&*TW_TEXT_LINK) {
+                for item in document.select(&TW_TEXT_LINK) {
                     let quality_text = item.text().collect::<String>();
                     let quality = if quality_text.contains("(") {
                         quality_text
@@ -192,9 +192,9 @@ pub async fn fetch_twitter(url: &str) -> Result<DownloadResult, ScrapingError> {
             }
         } else {
             {
-                for item in document.select(&*TW_VIDEO_ITEM) {
+                for item in document.select(&TW_VIDEO_ITEM) {
                     let href = item
-                        .select(&*TW_ITEM_VIDEO_LINK)
+                        .select(&TW_ITEM_VIDEO_LINK)
                         .next()
                         .and_then(|a| a.value().attr("href"))
                         .map(|s| s.to_string())
@@ -289,10 +289,10 @@ pub async fn fetch_twitter_v2(url: &str) -> Result<DownloadResult, ScrapingError
     result.provider = Some("twitsave".to_string());
 
     {
-        for item in document.select(&*TW_ORIGIN_ITEM) {
-            if let Some(a) = item.select(&*ANCHOR).next() {
+        for item in document.select(&TW_ORIGIN_ITEM) {
+            if let Some(a) = item.select(&ANCHOR).next() {
                 let resolution_text = item
-                    .select(&*TW_ITEM_BODY)
+                    .select(&TW_ITEM_BODY)
                     .next()
                     .map(|d| d.text().collect::<String>())
                     .unwrap_or_default();
@@ -301,7 +301,7 @@ pub async fn fetch_twitter_v2(url: &str) -> Result<DownloadResult, ScrapingError
                         .trim_start_matches("Resolution: ")
                         .splitn(2, 'x')
                         .collect();
-                    let width = parts.get(0).unwrap_or(&"").to_string();
+                    let width = parts.first().unwrap_or(&"").to_string();
                     let height = parts
                         .get(1)
                         .and_then(|s| s.parse::<u32>().ok())

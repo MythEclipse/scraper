@@ -67,6 +67,12 @@ impl OtakudesuRepository {
     }
 }
 
+impl Default for OtakudesuRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ScrapingRepository for OtakudesuRepository {
     async fn fetch_html(&self, url: &str) -> Result<String, ScrapingError> {

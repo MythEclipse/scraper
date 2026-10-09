@@ -241,3 +241,9 @@ impl DownloaderRepository {
         ytdl::fetch_bilibili(url).await
     }
 }
+
+impl Default for DownloaderRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}

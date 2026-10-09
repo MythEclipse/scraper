@@ -65,28 +65,40 @@ pub struct AlqDetailData {
     pub episodes: Vec<AlqEpisode>,
 }
 
-static ITEM_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("article.bs").unwrap());
-static TITLE_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(".tt h2").unwrap());
-static IMG_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("img").unwrap());
-static SCORE_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(".numscore").unwrap());
-static STATUS_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(".status").unwrap());
-static TYPE_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(".type").unwrap());
-static LINK_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("a").unwrap());
-static PAGINATION_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(".pagination .page-numbers:not(.next)").unwrap());
+static ITEM_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("article.bs").expect("literal CSS selector"));
+static TITLE_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".tt h2").expect("literal CSS selector"));
+static IMG_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("img").expect("literal CSS selector"));
+static SCORE_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".numscore").expect("literal CSS selector"));
+static STATUS_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".status").expect("literal CSS selector"));
+static TYPE_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".type").expect("literal CSS selector"));
+static LINK_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("a").expect("literal CSS selector"));
+static PAGINATION_SELECTOR: LazyLock<Selector> = LazyLock::new(|| {
+    Selector::parse(".pagination .page-numbers:not(.next)").expect("literal CSS selector")
+});
 static NEXT_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(".pagination .next").unwrap());
-static SLUG_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/([^/]+)/?$").unwrap());
-static GENRE_SLUG_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"genre-(.+)$").unwrap());
+    LazyLock::new(|| Selector::parse(".pagination .next").expect("literal CSS selector"));
+static SLUG_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/([^/]+)/?$").expect("literal regex"));
+static GENRE_SLUG_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"genre-(.+)$").expect("literal regex"));
 static EPISODE_LIST_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(".eplister ul li").unwrap());
-static EP_NUM_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(".epl-num").unwrap());
+    LazyLock::new(|| Selector::parse(".eplister ul li").expect("literal CSS selector"));
+static EP_NUM_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse(".epl-num").expect("literal CSS selector"));
 static EP_TITLE_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(".epl-title").unwrap());
+    LazyLock::new(|| Selector::parse(".epl-title").expect("literal CSS selector"));
 static EP_DATE_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(".epl-date").unwrap());
-static EP_DOWNLOAD_SELECTOR: LazyLock<Selector> =
-    LazyLock::new(|| Selector::parse(r#"a[rel="nofollow"][aria-label="Download"]"#).unwrap());
+    LazyLock::new(|| Selector::parse(".epl-date").expect("literal CSS selector"));
+static EP_DOWNLOAD_SELECTOR: LazyLock<Selector> = LazyLock::new(|| {
+    Selector::parse(r#"a[rel="nofollow"][aria-label="Download"]"#).expect("literal CSS selector")
+});
 pub fn parse_ongoing_anime(html: &str) -> Result<Vec<OngoingAnimeItem>, ScrapingError> {
     let items = parse_ongoing_anime_with_score(html)?;
     Ok(items
@@ -682,20 +694,20 @@ pub fn parse_anime_detail(html: &str) -> Result<AlqDetailData, ScrapingError> {
 
     let r#type = document
         .select(&spe_span_selector)
-        .find(|e| text(&e).contains("Tipe:"))
+        .find(|e| text(e).contains("Tipe:"))
         .and_then(|span| span.select(&a_selector).next())
         .map(|e| text(&e))
         .unwrap_or_default();
 
     let release_date = document
         .select(&spe_span_selector)
-        .find(|e| text(&e).contains("Dirilis:"))
+        .find(|e| text(e).contains("Dirilis:"))
         .map(|e| text(&e))
         .unwrap_or_default();
 
     let status = document
         .select(&spe_span_selector)
-        .find(|e| text(&e).contains("Status:"))
+        .find(|e| text(e).contains("Status:"))
         .map(|e| text(&e))
         .unwrap_or_default();
 
@@ -703,7 +715,7 @@ pub fn parse_anime_detail(html: &str) -> Result<AlqDetailData, ScrapingError> {
 
     let studio = document
         .select(&spe_span_selector)
-        .find(|e| text(&e).contains("Studio:"))
+        .find(|e| text(e).contains("Studio:"))
         .and_then(|span| span.select(&a_selector).next())
         .map(|e| text(&e))
         .unwrap_or_default();

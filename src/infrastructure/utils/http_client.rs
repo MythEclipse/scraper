@@ -96,19 +96,19 @@ impl Default for HttpClient {
 
 static HTTP_CLIENT_INIT: LazyLock<Result<Arc<HttpClient>, String>> = LazyLock::new(|| {
     HttpClient::new()
-        .map(|c| Arc::new(c))
+        .map(Arc::new)
         .map_err(|e| format!("Failed to initialize HTTP client: {}", e))
 });
 
 static HTTP_CLIENT_FAST_INIT: LazyLock<Result<Arc<HttpClient>, String>> = LazyLock::new(|| {
     HttpClient::with_timeout(10)
-        .map(|c| Arc::new(c))
+        .map(Arc::new)
         .map_err(|e| format!("Failed to initialize fast HTTP client: {}", e))
 });
 
 static HTTP_CLIENT_SLOW_INIT: LazyLock<Result<Arc<HttpClient>, String>> = LazyLock::new(|| {
     HttpClient::with_timeout(60)
-        .map(|c| Arc::new(c))
+        .map(Arc::new)
         .map_err(|e| format!("Failed to initialize slow HTTP client: {}", e))
 });
 

@@ -108,7 +108,7 @@ pub async fn fetch_whois(domain: &str) -> Result<Value, String> {
                         .and_then(|props| {
                             props.iter().find_map(|p| {
                                 let pa = p.as_array()?;
-                                if pa.get(0)?.as_str() == Some("fn") {
+                                if pa.first()?.as_str() == Some("fn") {
                                     pa.get(3).and_then(|v| v.as_str()).map(|s| s.to_string())
                                 } else {
                                     None
