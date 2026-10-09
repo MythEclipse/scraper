@@ -6,7 +6,7 @@ use axum::extract::Path;
 use axum::Json;
 use tracing::info;
 
-use crate::application::komik::use_cases::KomikUseCases;
+use crate::application::komik::use_cases::{new_use_cases, KomikUseCases};
 use crate::domain::error::AppError;
 use crate::infrastructure::repository::KomikRepository;
 use crate::presentation::dto::komik::{
@@ -23,8 +23,8 @@ use crate::presentation::dto::komik::{
 // Helper
 // ============================================================================
 
-fn make_use_cases() -> KomikUseCases {
-    KomikUseCases::new(KomikRepository::new())
+fn make_use_cases() -> KomikUseCases<KomikRepository> {
+    new_use_cases(KomikRepository::new())
 }
 
 // ============================================================================
