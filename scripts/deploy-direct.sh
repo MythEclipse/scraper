@@ -256,7 +256,10 @@ fi
 # never came up. curl --retry against /health is the only honest signal.
 if health_check; then
   ACTIVATED=0
-  rm -f "$BACKUP_BIN"
+  # as_root: the backup lives in LAUNCHER_DIR, which is root-owned on this host.
+  # A bare `rm` here failed with EACCES under a non-root deploy user, aborting
+  # the script AFTER a successful deploy and reporting the run as failed.
+  as_root rm -f "$BACKUP_BIN" || log "WARNING: could not remove $BACKUP_BIN"
   log "healthy — deploy of ${SHA:0:7} complete"
 else
   # `die` below would skip the ERR trap (plain exit), so roll back explicitly.
