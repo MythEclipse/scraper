@@ -12,7 +12,7 @@ use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::application::misc as use_cases;
-use crate::presentation::error::AppError;
+use crate::domain::error::AppError;
 
 /// Query params for currency converter.
 #[derive(Deserialize, IntoParams)]

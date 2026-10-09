@@ -7,11 +7,11 @@ use axum::Json;
 use tracing::info;
 
 use crate::application::komik::use_cases::KomikUseCases;
+use crate::domain::error::AppError;
 use crate::infrastructure::repository::KomikRepository;
 use crate::presentation::dto::komik::{
     ChapterResponse, DetailResponse, GenreKomikResponse, GenresResponse, SearchKomikResponse,
 };
-use crate::presentation::error::AppError;
 
 // ============================================================================
 // Response DTOs

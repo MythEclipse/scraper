@@ -10,8 +10,8 @@ use utoipa::ToSchema;
 
 use crate::application::anime::use_cases::AnimeUseCases;
 use crate::domain::entity::anime::*;
+use crate::domain::error::AppError;
 use crate::infrastructure::repository::OtakudesuRepository;
-use crate::presentation::error::AppError;
 
 // ============================================================================
 // Response DTOs

@@ -12,7 +12,7 @@ use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::application::stalk as use_cases;
-use crate::presentation::error::AppError;
+use crate::domain::error::AppError;
 
 /// Query params for stalk endpoints.
 #[derive(Deserialize, IntoParams)]

@@ -13,8 +13,8 @@ use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::application::downloader as use_cases;
+use crate::domain::error::AppError;
 use crate::presentation::dto::downloader::DownloadResponse;
-use crate::presentation::error::AppError;
 
 /// Request params for downloader endpoints.
 #[derive(Debug, Deserialize, IntoParams)]

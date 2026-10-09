@@ -10,7 +10,7 @@ use serde_json::Value;
 use utoipa::IntoParams;
 
 use crate::application::tools as use_cases;
-use crate::presentation::error::AppError;
+use crate::domain::error::AppError;
 
 #[derive(Deserialize, IntoParams)]
 pub struct DomainParams {

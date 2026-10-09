@@ -20,8 +20,6 @@ use crate::domain::entity::anime::{
     OngoingAnimeItemWithScore, Pagination, SearchAnimeItem,
 };
 
-use crate::presentation::dto::common::ApiResponse;
-
 // Re-export types for handlers to use
 pub use crate::domain::entity::anime::{
     CompleteAnimeItem as Anime2CompleteAnimeItem, GenreAnimeItem as Anime2GenreItem,
@@ -324,7 +322,7 @@ impl Anime2UseCases {
         &self,
         genre_slug: String,
         page: u32,
-    ) -> Result<ApiResponse<Vec<GenreAnimeItem>>, DomainError> {
+    ) -> Result<Vec<GenreAnimeItem>, DomainError> {
         let cache_key = format!("anime2:genre:{}:{}", genre_slug, page);
 
         self.cache()
@@ -340,7 +338,7 @@ impl Anime2UseCases {
                 .await
                 .map_err(|e| e.to_string())??;
 
-                Ok(ApiResponse::success(data))
+                Ok(data)
             })
             .await
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))
@@ -350,7 +348,7 @@ impl Anime2UseCases {
         &self,
         query: String,
         page: u32,
-    ) -> Result<ApiResponse<Vec<SearchAnimeItem>>, DomainError> {
+    ) -> Result<Vec<SearchAnimeItem>, DomainError> {
         let cache_key = format!("anime2:search:{}:{}", query, page);
 
         self.cache()
@@ -366,16 +364,13 @@ impl Anime2UseCases {
                 .await
                 .map_err(|e| e.to_string())??;
 
-                Ok(ApiResponse::success(data))
+                Ok(data)
             })
             .await
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))
     }
 
-    pub async fn latest(
-        &self,
-        page: u32,
-    ) -> Result<ApiResponse<Vec<LatestAnimeItem>>, DomainError> {
+    pub async fn latest(&self, page: u32) -> Result<Vec<LatestAnimeItem>, DomainError> {
         let cache_key = format!("anime2:latest:{}", page);
 
         self.cache()
@@ -391,7 +386,7 @@ impl Anime2UseCases {
                 .await
                 .map_err(|e| e.to_string())??;
 
-                Ok(ApiResponse::success(data))
+                Ok(data)
             })
             .await
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))
@@ -400,7 +395,7 @@ impl Anime2UseCases {
     pub async fn ongoing_anime(
         &self,
         page: u32,
-    ) -> Result<ApiResponse<Vec<OngoingAnimeItemWithScore>>, DomainError> {
+    ) -> Result<Vec<OngoingAnimeItemWithScore>, DomainError> {
         let cache_key = format!("anime2:ongoing:{}", page);
 
         self.cache()
@@ -416,16 +411,13 @@ impl Anime2UseCases {
                 .await
                 .map_err(|e| e.to_string())??;
 
-                Ok(ApiResponse::success(data))
+                Ok(data)
             })
             .await
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))
     }
 
-    pub async fn complete_anime(
-        &self,
-        page: u32,
-    ) -> Result<ApiResponse<Vec<CompleteAnimeItem>>, DomainError> {
+    pub async fn complete_anime(&self, page: u32) -> Result<Vec<CompleteAnimeItem>, DomainError> {
         let cache_key = format!("anime2:complete:{}", page);
 
         self.cache()
@@ -441,7 +433,7 @@ impl Anime2UseCases {
                 .await
                 .map_err(|e| e.to_string())??;
 
-                Ok(ApiResponse::success(data))
+                Ok(data)
             })
             .await
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))

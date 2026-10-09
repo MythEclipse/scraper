@@ -6,12 +6,12 @@ use std::sync::LazyLock;
 use tokio::sync::broadcast;
 use tracing::{debug, error, warn};
 
+use crate::domain::error::AppError;
 use crate::infrastructure::cache::mytheclipse;
 use crate::infrastructure::utils::cache_ttl::CACHE_TTL_VERY_SHORT;
 use crate::infrastructure::utils::http::common_headers;
 use crate::infrastructure::utils::http::is_internet_baik_block_page;
 use crate::infrastructure::utils::http_client::http_client;
-use crate::presentation::error::AppError;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FetchResult {

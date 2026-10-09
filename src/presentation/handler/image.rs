@@ -12,7 +12,7 @@ use serde::Deserialize;
 use utoipa::IntoParams;
 
 use crate::application::image as use_cases;
-use crate::presentation::error::AppError;
+use crate::domain::error::AppError;
 
 #[derive(Deserialize, IntoParams)]
 pub struct BratParams {

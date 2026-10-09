@@ -15,9 +15,9 @@ use crate::application::anime2::use_cases::{
 use crate::domain::entity::anime::{
     CompleteAnimeItem, GenreAnimeItem, LatestAnimeItem, OngoingAnimeItemWithScore, SearchAnimeItem,
 };
+use crate::domain::error::AppError;
 use crate::infrastructure::repository::AlqanimeRepository;
 use crate::presentation::dto::common::ApiResponse;
-use crate::presentation::error::AppError;
 
 // ============================================================================
 // Request DTOs
@@ -138,7 +138,7 @@ pub async fn genre_slug_index(
 ) -> Result<Json<ApiResponse<Vec<GenreAnimeItem>>>, AppError> {
     info!("Handling request for anime2 genre slug: {}", slug);
     let data = make_use_cases().genre_slug(slug, 1).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/genre/{slug}/{page} — Paginated genre results.
@@ -160,7 +160,7 @@ pub async fn genre_slug_page(
         slug, page
     );
     let data = make_use_cases().genre_slug(slug, page).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/search/{slug} — Search anime (first page).
@@ -179,7 +179,7 @@ pub async fn search_slug_index(
 ) -> Result<Json<ApiResponse<Vec<SearchAnimeItem>>>, AppError> {
     info!("Handling request for anime2 search slug: {}", slug);
     let data = make_use_cases().search(slug, 1).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/search/{slug}/{page} — Paginated search results.
@@ -201,7 +201,7 @@ pub async fn search_slug_page(
         slug, page
     );
     let data = make_use_cases().search(slug, page).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/latest/{slug} — Latest anime (slug is the page number).
@@ -223,7 +223,7 @@ pub async fn latest_slug(
         .map_err(|_| AppError::ScraperError(format!("Invalid page number: {}", slug)))?;
     info!("Handling request for anime2 latest page: {}", page);
     let data = make_use_cases().latest(page).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/ongoing_anime/{slug} — Ongoing anime list (slug is the page number).
@@ -245,7 +245,7 @@ pub async fn ongoing_anime_slug(
         .map_err(|_| AppError::ScraperError(format!("Invalid page number: {}", slug)))?;
     info!("Handling request for anime2 ongoing page: {}", page);
     let data = make_use_cases().ongoing_anime(page).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// GET /api/anime2/complete_anime/{slug} — Complete anime list (slug is the page number).
@@ -267,7 +267,7 @@ pub async fn complete_anime_slug(
         .map_err(|_| AppError::ScraperError(format!("Invalid page number: {}", slug)))?;
     info!("Handling request for anime2 complete page: {}", page);
     let data = make_use_cases().complete_anime(page).await?;
-    Ok(Json(data))
+    Ok(Json(ApiResponse::success(data)))
 }
 
 /// Routes served by this module, relative to its mount point.
