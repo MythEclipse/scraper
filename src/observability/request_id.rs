@@ -44,9 +44,9 @@ impl std::fmt::Display for RequestId {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
 /// use axum::Extension;
-/// use scraper_service::observability::RequestId;
+/// use scraper_service::observability::request_id::RequestId;
 ///
 /// async fn handler(Extension(req_id): Extension<RequestId>) {
 ///     println!("Request ID: {}", req_id);

@@ -11,116 +11,92 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
-
-env:
-  VPS_HOST: ${{ secrets.VPS_HOST }}
-  VPS_USER: ${{ secrets.VPS_USER }}
 
 jobs:
-  build-and-deploy:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      # The lib/bins carry ~80 pre-existing clippy warnings (mostly
+      # unwrap/expect, which this crate's own lints only warn on). Turning them
+      # into errors here would block every deploy on work unrelated to the
+      # pipeline, so they are reported and not gated. `panic`, `todo`,
+      # `unimplemented` and the dead_code/unused deny-list from Cargo.toml
+      # [lints] ARE real errors already and still fail this step.
+      - name: Clippy
+        run: cargo clippy --lib --bins --all-features
+
+      # Assert the suite actually ran: `cargo test` exits 0 when a target has
+      # zero tests, so a green run proves nothing without the count assertion.
+      - name: Test
+        run: |
+          set -o pipefail
+          cargo test --locked --all-features 2>&1 | tee /tmp/test.log
+          grep -qE '^test result: ok\. [1-9][0-9]* passed' /tmp/test.log \
+            || { echo "FAIL: expected at least one passing test"; exit 1; }
+
+  deploy:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      # Checkout is required: the deploy script is scp'd from THIS checkout,
+      # never from the payload that is live on the VPS.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v22
-        with:
-          determinate: false
-          extra-conf: |
-            sandbox = false
-            accept-flake-config = true
-            extra-substituters = https://attic.asepharyana.my.id/asepharyana https://attic.asepharyana.my.id/gmw
-            extra-trusted-public-keys = asepharyana:zBpY6vNI1nDJ4mU6W4q880BB0JB1qb3gRKkO/tGSMiQ= gmw:Fq2Anzuhkb+T/hftWnPcveHSi21/RzIgIOeG8pCJa88=
-
-      - name: Cache Nix
-        uses: DeterminateSystems/magic-nix-cache-action@v14
-        with:
-          use-flakehub: false
-
-      - name: Build scraper
-        id: build
-        run: |
-          nix build .#scraper --impure --option sandbox false --print-build-logs
-          STORE_PATH=$(readlink result)
-          echo "store-path=$STORE_PATH" >> "$GITHUB_OUTPUT"
-          echo "Build OK scraper: $STORE_PATH"
-
-      - name: Push to Attic cache
+      - name: Setup SSH
         env:
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
-        run: |
-          if [ -z "$ATTIC_TOKEN" ]; then
-            echo "ATTIC_TOKEN not set; skipping attic push"
-            exit 0
-          fi
-          STORE_PATH="${{ steps.build.outputs.store-path }}"
-          ATTIC_DIR="/nix/store/fygyy3yk4rqdknxkiwkqambpnhyax0k4-attic-0.1.0"
-
-          ATTIC_BIN=""
-          if command -v attic >/dev/null 2>&1; then
-            ATTIC_BIN="$(command -v attic)"
-          elif nix-store --realise "$ATTIC_DIR" 2>/tmp/attic-bootstrap.err; then
-            echo "✅ Pulled attic client from attic cache (HTTPS substituter)"
-            ATTIC_BIN="$ATTIC_DIR/bin/attic"
-          else
-            echo "attic client unavailable on runner; skipping attic push"
-            tail -5 /tmp/attic-bootstrap.err 2>/dev/null || true
-            exit 0
-          fi
-
-          mkdir -p "$HOME/.config/attic"
-          cat > "$HOME/.config/attic/config.toml" <<EOF
-          default-server = "pub"
-
-          [servers.pub]
-          endpoint = "https://attic.asepharyana.my.id"
-          token = "$ATTIC_TOKEN"
-          EOF
-
-          push_ok=""
-          for attempt in 1 2 3; do
-            if "$ATTIC_BIN" push pub:asepharyana "$STORE_PATH" --jobs 4 --ignore-upstream-cache-filter; then
-              echo "✅ Pushed $STORE_PATH to attic directly from runner"
-              push_ok=1
-              break
-            fi
-            echo "⚠️ Direct attic push attempt $attempt/3 failed; retrying in 10s..."
-            sleep 10
-          done
-          if [ -z "$push_ok" ]; then
-            echo "Direct attic push failed after 3 attempts; deploy will fall back to ssh copy"
-          fi
-
-      - name: Setup SSH key
-        env:
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           sed -i 's/\r$//' ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1 || { echo "SSH key invalid"; exit 1; }
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Deploy scraper to VPS
+      - name: Copy deploy script to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: scp -o BatchMode=yes scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/scraper-deploy-direct.sh"
+
+      # The binary is compiled ON the VPS, not here: it links against the
+      # host's libssl/glibc, so a runner artifact would only be a guess.
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_REF: ${{ github.ref_name }}
         run: |
-          STORE_PATH="${{ steps.build.outputs.store-path }}"
-          echo "=== Realising scraper: $STORE_PATH (substitute from attic, fallback ssh copy) ==="
-          if ssh "$VPS_USER@$VPS_HOST" "sudo /nix/var/nix/profiles/default/bin/nix-store --realise '$STORE_PATH'" 2>/dev/null; then
-            echo "Substituted scraper from Attic cache"
-          else
-            echo "Attic substitute failed; falling back to ssh copy"
-            nix copy --to "ssh://${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "$STORE_PATH"
-          fi
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "bash /tmp/scraper-deploy-direct.sh '$DEPLOY_SHA' '$DEPLOY_REF'"
 
-          echo "=== Updating profile ==="
-          ssh "$VPS_USER@$VPS_HOST" "sudo /nix/var/nix/profiles/default/bin/nix-env --profile /nix/var/nix/profiles/scraper --set '$STORE_PATH'"
+      - name: Verify service state
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "systemctl is-active scraper && systemctl show -p MainPID -p NRestarts -p ActiveEnterTimestamp -p ExecMainStartTimestamp --value scraper && readlink -f /opt/scraper/current && curl -fsS --max-time 10 http://127.0.0.1:4091/health"
 
-          echo "=== Restarting service ==="
-          ssh "$VPS_USER@$VPS_HOST" "sudo systemctl restart scraper && for i in \$(seq 1 15); do state=\$(systemctl is-active scraper 2>/dev/null || echo inactive); [ \"\$state\" = \"active\" ] && break; sleep 2; done; echo \"final-state=\$state\"; [ \"\$state\" = \"active\" ]"
-
-          echo "✅ scraper deployed"
+      - name: Remove deploy script
+        if: always()
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" "rm -f /tmp/scraper-deploy-direct.sh"

@@ -1,0 +1,17 @@
+[Unit]
+Description=Asepharyana Hub Scraper (native)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bws-exec scraper /opt/scraper/bin/scraper
+Restart=always
+RestartSec=5
+User=scraper
+Group=scraper
+WorkingDirectory=/var/lib/scraper
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

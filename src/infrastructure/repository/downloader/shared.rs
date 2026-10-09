@@ -233,8 +233,9 @@ pub(super) async fn run_playwright_scraper(
     url: &str,
     platform: &str,
 ) -> Result<serde_json::Value, ScrapingError> {
-    // Locate scrape_media.py robustly: alongside the running binary (Nix store),
-    // the Cargo manifest dir (dev), or a few well-known absolute paths.
+    // Locate scrape_media.py robustly: alongside the running binary (installed
+    // by scripts/deploy-direct.sh), the Cargo manifest dir (dev), or a few
+    // well-known absolute paths.
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
