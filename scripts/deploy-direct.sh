@@ -61,10 +61,39 @@ as_root() {
 }
 
 # ── toolchain ──────────────────────────────────────────────────────────────
-command -v cargo >/dev/null 2>&1 || die "cargo not found on PATH (expected a rustup toolchain)"
+# CI reaches this box over SSH as a non-interactive `bash script.sh`, which
+# sources neither ~/.profile nor ~/.bashrc — so ~/.cargo/env never runs and
+# cargo is absent from a runner's PATH (verified: a clean-env shell finds no
+# cargo). Resolve it explicitly instead of trusting the inherited environment.
+#
+# $HOME/.cargo/bin/cargo is a rustup PROXY: with RUSTUP_HOME/CARGO_HOME unset
+# (root's HOME, or any account other than the one that ran rustup) it exits
+# "could not choose a version of cargo to run". Both vars are exported so the
+# proxy resolves the toolchain regardless of which user SSHes in.
+CARGO_HOME_DIR="${CARGO_HOME:-/home/code/.cargo}"
+RUSTUP_HOME_DIR="${RUSTUP_HOME:-/home/code/.rustup}"
+export CARGO_HOME="$CARGO_HOME_DIR"
+export RUSTUP_HOME="$RUSTUP_HOME_DIR"
+export PATH="${CARGO_HOME_DIR}/bin:$PATH"
+
+resolve_cargo() {
+  if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1; then
+    command -v cargo
+  elif [ -x "${CARGO_HOME_DIR}/bin/cargo" ]; then
+    printf '%s\n' "${CARGO_HOME_DIR}/bin/cargo"
+  elif [ -x /usr/local/cargo/bin/cargo ]; then
+    printf '%s\n' /usr/local/cargo/bin/cargo
+  else
+    die "cargo not found or unusable (tried PATH, ${CARGO_HOME_DIR}/bin, /usr/local/cargo/bin)"
+  fi
+}
+CARGO="$(resolve_cargo)"
+
 command -v git   >/dev/null 2>&1 || die "git not found on PATH"
 command -v curl  >/dev/null 2>&1 || die "curl not found on PATH"
-log "cargo $(cargo --version) | user $(id -un)"
+# Fail loudly NOW rather than three minutes into a release build.
+"$CARGO" --version >/dev/null 2>&1 || die "cargo present but unusable: $("$CARGO" --version 2>&1 | head -2)"
+log "cargo $("$CARGO" --version) | CARGO_HOME=$CARGO_HOME | user $(id -un)"
 
 # ── state captured before we touch anything ────────────────────────────────
 PREV_TARGET=""
@@ -167,8 +196,8 @@ if [ -x "${RELEASE_DIR}/target/release/scraper" ] \
 else
   (
     cd "$RELEASE_DIR"
-    log "cargo build --release --locked"
-    cargo build --release --locked
+    log "cargo build --release --locked ($CARGO)"
+    "$CARGO" build --release --locked
   )
 fi
 [ -x "${RELEASE_DIR}/target/release/scraper" ] || die "cargo build produced no release binary"
