@@ -8,6 +8,7 @@ use tracing::info;
 
 use crate::application::komik::use_cases::{new_use_cases, KomikUseCases};
 use crate::domain::error::AppError;
+use crate::infrastructure::cache::redis::Cache;
 use crate::infrastructure::repository::KomikRepository;
 use crate::presentation::dto::komik::{
     ChapterResponse, DetailResponse, GenreKomikResponse, GenresResponse, SearchKomikResponse,
@@ -23,8 +24,8 @@ use crate::presentation::dto::komik::{
 // Helper
 // ============================================================================
 
-fn make_use_cases() -> KomikUseCases<KomikRepository> {
-    new_use_cases(KomikRepository::new())
+fn make_use_cases() -> KomikUseCases<KomikRepository, Cache> {
+    new_use_cases(KomikRepository, Cache)
 }
 
 // ============================================================================

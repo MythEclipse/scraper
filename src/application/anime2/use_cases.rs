@@ -9,11 +9,7 @@
 //!       `crate::domain::entity::anime::{GenreAnimeItem, SearchAnimeItem, LatestAnimeItem}`.
 
 use crate::domain::error::*;
-use crate::domain::repository::ScrapingRepository;
-use crate::infrastructure::cache::redis::Cache;
-use crate::infrastructure::repository::AlqanimeRepository;
-
-use crate::infrastructure::repository::parsers::alqanime_parser as parser;
+use crate::domain::repository::{AlqanimeAnimeRepository, CachePort};
 
 use crate::domain::entity::anime::{
     CompleteAnimeItem, FilterAnimeItem, Genre, GenreAnimeItem, LatestAnimeItem,
@@ -21,13 +17,11 @@ use crate::domain::entity::anime::{
 };
 
 // Re-export types for handlers to use
+pub use crate::domain::entity::alqanime::*;
 pub use crate::domain::entity::anime::{
     CompleteAnimeItem as Anime2CompleteAnimeItem, GenreAnimeItem as Anime2GenreItem,
     LatestAnimeItem as Anime2LatestItem, OngoingAnimeItemWithScore as Anime2OngoingItem,
     SearchAnimeItem as Anime2SearchItem,
-};
-pub use crate::infrastructure::repository::parsers::alqanime_parser::{
-    AlqDetailData, AlqDownloadItem, AlqEpisode, AlqLink, AlqRecommendation,
 };
 
 use serde::{Deserialize, Serialize};
@@ -101,39 +95,35 @@ const COMPLETE_CACHE_TTL: u64 = 300;
 // Use case struct
 // ============================================================================
 
-pub struct Anime2UseCases {
-    repository: AlqanimeRepository,
+pub struct Anime2UseCases<R: AlqanimeAnimeRepository, C: CachePort> {
+    repository: R,
+    cache: C,
 }
 
-impl Anime2UseCases {
-    pub fn new(repository: AlqanimeRepository) -> Self {
-        Self { repository }
-    }
+/// Wires the port implementation chosen by the composition root.
+pub fn new_use_cases<R: AlqanimeAnimeRepository, C: CachePort>(
+    repository: R,
+    cache: C,
+) -> Anime2UseCases<R, C> {
+    Anime2UseCases { repository, cache }
+}
 
+impl<R: AlqanimeAnimeRepository, C: CachePort> Anime2UseCases<R, C> {
     pub async fn index(&self) -> Result<Anime2Response, DomainError> {
-        Cache
+        self.cache
             .get_or_set("anime2:index", INDEX_CACHE_TTL, || async {
-                let ongoing_html = self
+                let ongoing_items = self
                     .repository
-                    .fetch_html(&self.repository.index_ongoing_url())
+                    .fetch_index_ongoing()
                     .await
                     .map_err(|e| e.to_string())?;
-                let complete_html = self
+                let complete_items = self
                     .repository
-                    .fetch_html(&self.repository.index_complete_url())
+                    .fetch_index_complete()
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let data = tokio::task::spawn_blocking(move || {
-                    Ok::<_, String>((
-                        parser::parse_ongoing_anime(&ongoing_html).map_err(|e| e.to_string())?,
-                        parser::parse_complete_anime(&complete_html).map_err(|e| e.to_string())?,
-                    ))
-                })
-                .await
-                .map_err(|e| e.to_string())??;
-                let ongoing: Vec<Anime2Item> = data
-                    .0
+                let ongoing: Vec<Anime2Item> = ongoing_items
                     .into_iter()
                     .map(|item| Anime2Item {
                         title: item.title,
@@ -146,8 +136,7 @@ impl Anime2UseCases {
                     })
                     .collect();
 
-                let complete: Vec<Anime2Item> = data
-                    .1
+                let complete: Vec<Anime2Item> = complete_items
                     .into_iter()
                     .map(|item| Anime2Item {
                         title: item.title,
@@ -173,19 +162,13 @@ impl Anime2UseCases {
     }
 
     pub async fn genre_list(&self) -> Result<GenresResponse, DomainError> {
-        Cache
+        self.cache
             .get_or_set("anime2:genres:list:v3", GENRE_LIST_CACHE_TTL, || async {
-                let html = self
+                let genres = self
                     .repository
-                    .fetch_html(&self.repository.genre_list_url())
+                    .fetch_genres()
                     .await
                     .map_err(|e| e.to_string())?;
-
-                let genres = tokio::task::spawn_blocking(move || {
-                    parser::parse_genres(&html).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(GenresResponse {
                     status: "Ok".to_string(),
@@ -196,6 +179,7 @@ impl Anime2UseCases {
             .map_err(|e| DomainError::Scraping(ScrapingError::Http(e)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn filter(
         &self,
         page: u32,
@@ -208,45 +192,29 @@ impl Anime2UseCases {
             "anime2:filter:{}:{:?}:{:?}:{:?}:{}",
             page, genre, status, anime_type, order
         );
-        let genre_clone = genre.clone();
-        let status_clone = status.clone();
-        let anime_type_clone = anime_type.clone();
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, FILTER_CACHE_TTL, || async {
-                let mut url = self.repository.filter_url(page, &order);
-
-                if let Some(g) = &genre {
-                    for genre_item in g.split(',') {
-                        url.push_str(&format!("&genre[]={}", genre_item.trim()));
-                    }
-                }
-                if let Some(s) = &status {
-                    url.push_str(&format!("&status={}", s));
-                }
-                if let Some(t) = &anime_type {
-                    url.push_str(&format!("&type={}", t));
-                }
-
-                let html = self
+                let (data, pagination) = self
                     .repository
-                    .fetch_html(&url)
+                    .fetch_filter(
+                        page,
+                        genre.as_deref().unwrap_or_default(),
+                        status.as_deref().unwrap_or_default(),
+                        anime_type.as_deref().unwrap_or_default(),
+                        &order,
+                    )
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_filter_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(FilterResponse {
                     success: true,
                     data,
                     pagination,
                     filters_applied: FiltersApplied {
-                        genre: genre_clone,
-                        status: status_clone,
-                        r#type: anime_type_clone,
+                        genre: genre.clone(),
+                        status: status.clone(),
+                        r#type: anime_type.clone(),
                         order: order.clone(),
                     },
                     status: "Ok".to_string(),
@@ -259,49 +227,34 @@ impl Anime2UseCases {
     pub async fn detail(&self, slug: String) -> Result<DetailResponse, DomainError> {
         let cache_key = format!("anime2:detail:{}", slug);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, DETAIL_CACHE_TTL, || async {
-                let detail_url = self.repository.detail_url(&slug);
-                let detail_html = self
+                let mut data = self
                     .repository
-                    .fetch_html(&detail_url)
+                    .fetch_detail(&slug)
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let mut data = tokio::task::spawn_blocking(move || {
-                    parser::parse_anime_detail(&detail_html).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
+                // Resolve download URLs for the five most recent episodes. A
+                // failure here is not fatal: the detail page is still useful
+                // without a direct download link on every episode.
+                let episode_urls: Vec<String> = data
+                    .episodes
+                    .iter()
+                    .take(5)
+                    .map(|ep| ep.url.clone())
+                    .collect();
 
-                // Fetch download URLs for the latest episodes
-                let episodes = &mut data.episodes;
-                if !episodes.is_empty() {
-                    // Limit to latest 5 episodes to keep things fast
-                    let latest: Vec<_> = episodes
-                        .iter_mut()
-                        .take(5)
-                        .map(|ep| ep.url.clone())
-                        .collect();
+                let downloads = futures::future::join_all(
+                    episode_urls
+                        .iter()
+                        .map(|url| self.repository.fetch_episode_download(url)),
+                )
+                .await;
 
-                    let results: Vec<_> = futures::future::join_all(
-                        latest.iter().map(|url| self.repository.fetch_html(url)),
-                    )
-                    .await;
-
-                    for (i, result) in results.into_iter().enumerate() {
-                        if let Ok(html) = result {
-                            if let Ok(Some(dl_url)) = tokio::task::spawn_blocking(move || {
-                                parser::parse_episode_download(&html)
-                            })
-                            .await
-                            .unwrap_or(Ok(None))
-                            {
-                                if let Some(ep) = episodes.get_mut(i) {
-                                    ep.download_url = Some(dl_url);
-                                }
-                            }
-                        }
+                for (episode, download) in data.episodes.iter_mut().take(5).zip(downloads) {
+                    if let Ok(url) = download {
+                        episode.download_url = Some(url);
                     }
                 }
 
@@ -321,18 +274,13 @@ impl Anime2UseCases {
     ) -> Result<Vec<GenreAnimeItem>, DomainError> {
         let cache_key = format!("anime2:genre:{}:{}", genre_slug, page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
-                let html = self
+                let (data, _pagination) = self
                     .repository
-                    .fetch_html(&self.repository.genre_page_url(&genre_slug, page))
+                    .fetch_genre_page(&genre_slug, page)
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, _pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_genre_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(data)
             })
@@ -347,18 +295,13 @@ impl Anime2UseCases {
     ) -> Result<Vec<SearchAnimeItem>, DomainError> {
         let cache_key = format!("anime2:search:{}:{}", query, page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, SEARCH_CACHE_TTL, || async {
-                let html = self
+                let (data, _pagination) = self
                     .repository
-                    .fetch_html(&self.repository.search_url(&query, page))
+                    .fetch_search_page(&query, page)
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, _pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_search_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(data)
             })
@@ -369,18 +312,13 @@ impl Anime2UseCases {
     pub async fn latest(&self, page: u32) -> Result<Vec<LatestAnimeItem>, DomainError> {
         let cache_key = format!("anime2:latest:{}", page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, LATEST_CACHE_TTL, || async {
-                let html = self
+                let (data, _pagination) = self
                     .repository
-                    .fetch_html(&self.repository.latest_url(page))
+                    .fetch_latest_page(page)
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, _pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_latest_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(data)
             })
@@ -394,18 +332,13 @@ impl Anime2UseCases {
     ) -> Result<Vec<OngoingAnimeItemWithScore>, DomainError> {
         let cache_key = format!("anime2:ongoing:{}", page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, ONGOING_CACHE_TTL, || async {
-                let html = self
+                let (data, _pagination) = self
                     .repository
-                    .fetch_html(&self.repository.ongoing_url(page))
+                    .fetch_ongoing_page(page)
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, _pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_ongoing_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(data)
             })
@@ -416,18 +349,13 @@ impl Anime2UseCases {
     pub async fn complete_anime(&self, page: u32) -> Result<Vec<CompleteAnimeItem>, DomainError> {
         let cache_key = format!("anime2:complete:{}", page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, COMPLETE_CACHE_TTL, || async {
-                let html = self
+                let (data, _pagination) = self
                     .repository
-                    .fetch_html(&self.repository.complete_url(page))
+                    .fetch_complete_page(page)
                     .await
                     .map_err(|e| e.to_string())?;
-                let (data, _pagination) = tokio::task::spawn_blocking(move || {
-                    parser::parse_complete_page(&html, page).map_err(|e| e.to_string())
-                })
-                .await
-                .map_err(|e| e.to_string())??;
 
                 Ok(data)
             })

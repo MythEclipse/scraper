@@ -1,3 +1,6 @@
+use crate::domain::entity::alqanime::{
+    AlqDetailData, AlqDownloadItem, AlqEpisode, AlqLink, AlqRecommendation,
+};
 use crate::domain::entity::anime::{
     CompleteAnimeItem, DetailGenre, FilterAnimeItem, Genre, GenreAnimeItem, LatestAnimeItem,
     OngoingAnimeItem, OngoingAnimeItemWithScore, Pagination, PaginationWithStringPages,
@@ -10,60 +13,11 @@ use crate::infrastructure::scraping::parsing_utils::{
 };
 
 /// An episode entry from the detail page episode list.
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone)]
-pub struct AlqEpisode {
-    pub episode: String,
-    pub title: String,
-    pub url: String,
-    pub date: String,
-    pub download_url: Option<String>,
-}
 
 /// Parser-specific types for Alqanime detail data
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone)]
-pub struct AlqLink {
-    pub name: String,
-    pub url: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone)]
-pub struct AlqDownloadItem {
-    pub resolution: String,
-    pub links: Vec<AlqLink>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone)]
-pub struct AlqRecommendation {
-    pub title: String,
-    pub slug: String,
-    pub poster: String,
-    pub status: String,
-    pub r#type: String,
-}
-
 use regex::Regex;
 use scraper::Selector;
 use std::sync::LazyLock;
-
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone)]
-pub struct AlqDetailData {
-    pub title: String,
-    pub alternative_title: String,
-    pub poster: String,
-    pub poster2: String,
-    pub r#type: String,
-    pub release_date: String,
-    pub status: String,
-    pub synopsis: String,
-    pub studio: String,
-    pub genres: Vec<DetailGenre>,
-    pub producers: Vec<String>,
-    pub recommendations: Vec<AlqRecommendation>,
-    pub batch: Vec<AlqDownloadItem>,
-    pub ova: Vec<AlqDownloadItem>,
-    pub downloads: Vec<AlqDownloadItem>,
-    pub episodes: Vec<AlqEpisode>,
-}
 
 static ITEM_SELECTOR: LazyLock<Selector> =
     LazyLock::new(|| Selector::parse("article.bs").expect("literal CSS selector"));

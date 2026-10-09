@@ -7,8 +7,7 @@
 use crate::domain::entity::anime::Pagination;
 use crate::domain::entity::komik::{ChapterData, DetailData, KomikGenre, KomikItem};
 use crate::domain::error::*;
-use crate::domain::repository::KomikComicRepository;
-use crate::infrastructure::cache::redis::Cache;
+use crate::domain::repository::{CachePort, KomikComicRepository};
 
 const GENRE_LIST_CACHE_TTL: u64 = 3600;
 const GENRE_CACHE_TTL: u64 = 300;
@@ -16,18 +15,22 @@ const DETAIL_CACHE_TTL: u64 = 300;
 const CHAPTER_CACHE_TTL: u64 = 300;
 const SEARCH_CACHE_TTL: u64 = 300;
 
-pub struct KomikUseCases<R: KomikComicRepository> {
+pub struct KomikUseCases<R: KomikComicRepository, C: CachePort> {
     repository: R,
+    cache: C,
 }
 
 /// Wires the port implementation chosen by the composition root.
-pub fn new_use_cases<R: KomikComicRepository>(repository: R) -> KomikUseCases<R> {
-    KomikUseCases { repository }
+pub fn new_use_cases<R: KomikComicRepository, C: CachePort>(
+    repository: R,
+    cache: C,
+) -> KomikUseCases<R, C> {
+    KomikUseCases { repository, cache }
 }
 
-impl<R: KomikComicRepository> KomikUseCases<R> {
+impl<R: KomikComicRepository, C: CachePort> KomikUseCases<R, C> {
     pub async fn genre_list(&self) -> Result<Vec<KomikGenre>, DomainError> {
-        Cache
+        self.cache
             .get_or_set("komik:genres:list:v3", GENRE_LIST_CACHE_TTL, || async {
                 self.repository
                     .fetch_genres()
@@ -61,7 +64,7 @@ impl<R: KomikComicRepository> KomikUseCases<R> {
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:genre:{}:{}:v2", genre_slug, page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
                 self.repository
                     .fetch_genre_page(&genre_slug, page)
@@ -75,7 +78,7 @@ impl<R: KomikComicRepository> KomikUseCases<R> {
     pub async fn detail_slug(&self, komik_id: String) -> Result<DetailData, DomainError> {
         let cache_key = format!("komik:detail:{}", komik_id);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, DETAIL_CACHE_TTL, || async {
                 self.repository
                     .fetch_detail(&komik_id)
@@ -89,7 +92,7 @@ impl<R: KomikComicRepository> KomikUseCases<R> {
     pub async fn chapter_slug(&self, chapter_url: String) -> Result<ChapterData, DomainError> {
         let cache_key = format!("komik:chapter:{}", chapter_url);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, CHAPTER_CACHE_TTL, || async {
                 self.repository
                     .fetch_chapter(&chapter_url)
@@ -136,18 +139,22 @@ impl<R: KomikComicRepository> KomikUseCases<R> {
             .await
     }
 
-    /// Shared body of the four paginated list routes: fetch, then refuse to
-    /// cache an empty page so a broken upstream cannot be pinned in the cache.
+    /// Shared body of the four paginated list routes.
+    ///
+    /// Takes the already-started fetch rather than a closure so the caller
+    /// stays free of borrow gymnastics; the empty-page check happens after the
+    /// fetch so a broken upstream page is never pinned in the cache.
     async fn list_page(
         &self,
         list_name: &str,
         page: u32,
-        fetch: impl std::future::Future<Output = Result<(Vec<KomikItem>, Pagination), ScrapingError>>,
+        fetch: impl std::future::Future<Output = Result<(Vec<KomikItem>, Pagination), ScrapingError>>
+            + Send,
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:list:{}:{}:v2", list_name, page);
 
-        Cache
-            .get_or_set(&cache_key, GENRE_CACHE_TTL, || async {
+        self.cache
+            .get_or_set(&cache_key, GENRE_CACHE_TTL, || async move {
                 let (items, pagination) = fetch.await.map_err(|e| e.to_string())?;
                 if items.is_empty() {
                     return Err(format!("Empty komik {} page {}", list_name, page));
@@ -181,7 +188,7 @@ impl<R: KomikComicRepository> KomikUseCases<R> {
     ) -> Result<(Vec<KomikItem>, Pagination), DomainError> {
         let cache_key = format!("komik:search:{}:{}", query, page);
 
-        Cache
+        self.cache
             .get_or_set(&cache_key, SEARCH_CACHE_TTL, || async {
                 self.repository
                     .fetch_search_page(&query, page)

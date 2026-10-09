@@ -10,9 +10,11 @@
 
 use async_trait::async_trait;
 
+use crate::domain::entity::alqanime::AlqDetailData;
 use crate::domain::entity::anime::{
-    AnimeData, AnimeDetailData, AnimeFullData, CompleteAnimeItem, CompleteAnimeListItem, Genre,
-    GenreAnimeItem, LatestAnimeItem, OngoingAnimeItemWithScore, OngoingAnimeListItem, Pagination,
+    AnimeData, AnimeDetailData, AnimeFullData, CompleteAnimeItem, CompleteAnimeListItem,
+    FilterAnimeItem, Genre, GenreAnimeItem, LatestAnimeItem, OngoingAnimeItem,
+    OngoingAnimeItemWithScore, OngoingAnimeListItem, Pagination, PaginationWithStringPages,
     SearchAnimeItem,
 };
 use crate::domain::entity::komik::{ChapterData, DetailData, KomikGenre, KomikItem};
@@ -86,12 +88,8 @@ pub trait KomikComicRepository: Send + Sync {
 /// Anime listings and detail pages from the Alqanime site.
 #[async_trait]
 pub trait AlqanimeAnimeRepository: Send + Sync {
-    async fn fetch_index_ongoing(
-        &self,
-    ) -> Result<(Vec<OngoingAnimeItemWithScore>, Pagination), ScrapingError>;
-    async fn fetch_index_complete(
-        &self,
-    ) -> Result<(Vec<CompleteAnimeItem>, Pagination), ScrapingError>;
+    async fn fetch_index_ongoing(&self) -> Result<Vec<OngoingAnimeItem>, ScrapingError>;
+    async fn fetch_index_complete(&self) -> Result<Vec<CompleteAnimeItem>, ScrapingError>;
     async fn fetch_genres(&self) -> Result<Vec<Genre>, ScrapingError>;
     async fn fetch_filter(
         &self,
@@ -100,8 +98,8 @@ pub trait AlqanimeAnimeRepository: Send + Sync {
         status: &str,
         anime_type: &str,
         order: &str,
-    ) -> Result<(Vec<LatestAnimeItem>, Pagination), ScrapingError>;
-    async fn fetch_detail(&self, slug: &str) -> Result<AnimeDetailData, ScrapingError>;
+    ) -> Result<(Vec<FilterAnimeItem>, Pagination), ScrapingError>;
+    async fn fetch_detail(&self, slug: &str) -> Result<AlqDetailData, ScrapingError>;
     async fn fetch_genre_page(
         &self,
         genre_slug: &str,
@@ -111,7 +109,7 @@ pub trait AlqanimeAnimeRepository: Send + Sync {
         &self,
         query: &str,
         page: u32,
-    ) -> Result<(Vec<SearchAnimeItem>, Pagination), ScrapingError>;
+    ) -> Result<(Vec<SearchAnimeItem>, PaginationWithStringPages), ScrapingError>;
     async fn fetch_latest_page(
         &self,
         page: u32,
@@ -124,7 +122,7 @@ pub trait AlqanimeAnimeRepository: Send + Sync {
         &self,
         page: u32,
     ) -> Result<(Vec<CompleteAnimeItem>, Pagination), ScrapingError>;
-    async fn fetch_episode_download(&self, slug: &str) -> Result<serde_json::Value, ScrapingError>;
+    async fn fetch_episode_download(&self, episode_url: &str) -> Result<String, ScrapingError>;
 }
 
 /// Read-through cache contract used by the use cases.

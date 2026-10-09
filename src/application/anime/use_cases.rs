@@ -5,20 +5,20 @@
 
 use crate::domain::entity::anime::*;
 use crate::domain::error::*;
-use crate::domain::repository::OtakudesuAnimeRepository;
-use crate::infrastructure::cache::redis::Cache;
+use crate::domain::repository::{CachePort, OtakudesuAnimeRepository};
 
 const INDEX_CACHE_TTL: u64 = 10;
 const GENRE_LIST_CACHE_TTL: u64 = 3600;
 const DEFAULT_CACHE_TTL: u64 = 300;
 
-pub struct AnimeUseCases<R: OtakudesuAnimeRepository> {
+pub struct AnimeUseCases<R: OtakudesuAnimeRepository, C: CachePort> {
     repository: R,
+    cache: C,
 }
 
-impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
+impl<R: OtakudesuAnimeRepository, C: CachePort> AnimeUseCases<R, C> {
     pub async fn get_anime_index(&self) -> Result<AnimeData, DomainError> {
-        Cache
+        self.cache
             .get_or_set("anime:index:v2", INDEX_CACHE_TTL, || async {
                 let data = self
                     .repository
@@ -37,7 +37,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
     }
 
     pub async fn get_genres(&self) -> Result<Vec<Genre>, DomainError> {
-        Cache
+        self.cache
             .get_or_set("anime:genres:list", GENRE_LIST_CACHE_TTL, || async {
                 self.repository
                     .fetch_genres()
@@ -50,7 +50,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
 
     pub async fn get_anime_detail(&self, slug: String) -> Result<AnimeDetailData, DomainError> {
         let cache_key = format!("anime:detail:{}", slug);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 let data = self
                     .repository
@@ -69,7 +69,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
         slug: String,
     ) -> Result<(Vec<CompleteAnimeListItem>, Pagination), DomainError> {
         let cache_key = format!("anime:complete:{}", slug);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_complete_anime_page(&slug)
@@ -85,7 +85,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
         slug: String,
     ) -> Result<(Vec<OngoingAnimeListItem>, Pagination), DomainError> {
         let cache_key = format!("anime:ongoing:{}", slug);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_ongoing_anime_page(&slug)
@@ -101,7 +101,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
         slug: String,
     ) -> Result<(Vec<LatestAnimeItem>, Pagination), DomainError> {
         let cache_key = format!("anime:latest:{}", slug);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_latest_anime_page(&slug)
@@ -118,7 +118,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
         page: String,
     ) -> Result<(Vec<SearchAnimeItem>, Pagination), DomainError> {
         let cache_key = format!("anime:search:{}:{}", slug, page);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_search_anime_page(&slug, &page)
@@ -135,7 +135,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
         page: String,
     ) -> Result<(Vec<GenreAnimeItem>, Pagination), DomainError> {
         let cache_key = format!("anime:genre:{}:{}", genre_slug, page);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_genre_anime_page(&genre_slug, &page)
@@ -148,7 +148,7 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
 
     pub async fn get_anime_full(&self, slug: String) -> Result<AnimeFullData, DomainError> {
         let cache_key = format!("anime:full:{}", slug);
-        Cache
+        self.cache
             .get_or_set(&cache_key, DEFAULT_CACHE_TTL, || async {
                 self.repository
                     .fetch_anime_full(&slug)
@@ -161,6 +161,9 @@ impl<R: OtakudesuAnimeRepository> AnimeUseCases<R> {
 }
 
 /// Wires the port implementation chosen by the composition root.
-pub fn new_use_cases<R: OtakudesuAnimeRepository>(repository: R) -> AnimeUseCases<R> {
-    AnimeUseCases { repository }
+pub fn new_use_cases<R: OtakudesuAnimeRepository, C: CachePort>(
+    repository: R,
+    cache: C,
+) -> AnimeUseCases<R, C> {
+    AnimeUseCases { repository, cache }
 }

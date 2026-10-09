@@ -8,7 +8,7 @@ use serde::Deserialize;
 use tracing::info;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::application::anime2::use_cases::Anime2UseCases;
+use crate::application::anime2::use_cases::{new_use_cases, Anime2UseCases};
 use crate::application::anime2::use_cases::{
     Anime2Response, DetailResponse, FilterResponse, GenresResponse,
 };
@@ -16,6 +16,7 @@ use crate::domain::entity::anime::{
     CompleteAnimeItem, GenreAnimeItem, LatestAnimeItem, OngoingAnimeItemWithScore, SearchAnimeItem,
 };
 use crate::domain::error::AppError;
+use crate::infrastructure::cache::redis::Cache;
 use crate::infrastructure::repository::AlqanimeRepository;
 use crate::presentation::dto::common::ApiResponse;
 
@@ -37,8 +38,8 @@ pub struct FilterQuery {
 // Helper
 // ============================================================================
 
-fn make_use_cases() -> Anime2UseCases {
-    Anime2UseCases::new(AlqanimeRepository::new())
+fn make_use_cases() -> Anime2UseCases<AlqanimeRepository, Cache> {
+    new_use_cases(AlqanimeRepository, Cache)
 }
 
 // ============================================================================
