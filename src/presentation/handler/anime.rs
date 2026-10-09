@@ -1,4 +1,6 @@
 //! Anime (Otakudesu) API handlers.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Path;
 use axum::Json;
@@ -296,4 +298,21 @@ pub async fn genre_slug_page(
         data,
         pagination,
     }))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/api/anime` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/", get(anime_index))
+        .route("/genre_list", get(genres))
+        .route("/detail/{slug}", get(detail_slug))
+        .route("/complete_anime/{slug}", get(complete_anime_slug))
+        .route("/full/{slug}", get(full_slug))
+        .route("/ongoing_anime/{slug}", get(ongoing_anime_slug))
+        .route("/latest/{slug}", get(latest_slug))
+        .route("/search/{slug}", get(search_slug_index))
+        .route("/search/{slug}/{page}", get(search_slug_page))
+        .route("/genre/{slug}", get(genre_slug_index))
+        .route("/genre/{slug}/{page}", get(genre_slug_page))
 }

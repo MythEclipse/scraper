@@ -1,4 +1,6 @@
 //! Komik API handlers.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Path;
 use axum::Json;
@@ -289,4 +291,21 @@ pub async fn search_slug_page(
         data,
         pagination,
     }))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/api/komik` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/genre_list", get(genre_list))
+        .route("/chapter/{slug}", get(chapter_slug))
+        .route("/detail/{slug}", get(detail_slug))
+        .route("/genre/{slug}", get(genre_slug))
+        .route("/genre/{slug}/{page}", get(genre_slug_page))
+        .route("/manga/{slug}", get(manga_slug))
+        .route("/manhua/{slug}", get(manhua_slug))
+        .route("/manhwa/{slug}", get(manhwa_slug))
+        .route("/popular/{slug}", get(popular_slug))
+        .route("/search/{slug}", get(search_slug))
+        .route("/search/{slug}/{page}", get(search_slug_page))
 }

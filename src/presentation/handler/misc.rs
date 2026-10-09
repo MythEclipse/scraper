@@ -1,6 +1,8 @@
 //! Axum handlers for misc utility endpoints.
 //!
 //! Ported from Shirokami-API `scraper/misc/*.js`.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -89,4 +91,14 @@ pub async fn kurs_bca_handler() -> Result<(StatusCode, Json<Value>), AppError> {
 pub async fn server_info_handler() -> Result<(StatusCode, Json<Value>), AppError> {
     let result = use_cases::server_info().await?;
     Ok((StatusCode::OK, Json(result)))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/misc` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/currency-converter", get(currency_converter_handler))
+        .route("/harga-emas", get(harga_emas_handler))
+        .route("/kurs-bca", get(kurs_bca_handler))
+        .route("/server-info", get(server_info_handler))
 }

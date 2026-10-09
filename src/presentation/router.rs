@@ -1,6 +1,8 @@
-//! Axum router assembly.
-
-use std::sync::Arc;
+//! Router assembly — the composition root for all HTTP routes.
+//!
+//! Each module owns the routes it dispatches to (see `handler::*::router`),
+//! so this file only decides *where* each module is mounted. Adding an
+//! endpoint touches one handler module, never this file.
 
 use axum::Router;
 use tower_http::compression::{CompressionLayer, CompressionLevel};
@@ -8,360 +10,32 @@ use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
+use crate::observability::metrics::otel_metrics_middleware;
 use crate::observability::openapi::ApiDoc;
 use crate::observability::openapi_modules::ModuleApiDoc;
-use crate::presentation::state::AppState;
+use crate::presentation::handler;
 
 /// Build the main application router with all routes, middleware, and Swagger UI.
-pub fn build_router(app_state: Arc<AppState>) -> anyhow::Result<Router> {
+///
+/// Handlers take no shared state: every one of them resolves its own
+/// repository from the process-wide singletons, so there is nothing to inject.
+pub fn build_router() -> Router {
     let mut openapi = ApiDoc::openapi();
     openapi.merge(ModuleApiDoc::openapi());
 
-    let app = Router::new()
-        // Anime routes
-        .route(
-            "/api/anime",
-            axum::routing::get(crate::presentation::handler::anime::anime_index),
-        )
-        .route(
-            "/api/anime/genre_list",
-            axum::routing::get(crate::presentation::handler::anime::genres),
-        )
-        .route(
-            "/api/anime/detail/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::detail_slug),
-        )
-        .route(
-            "/api/anime/complete_anime/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::complete_anime_slug),
-        )
-        .route(
-            "/api/anime/full/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::full_slug),
-        )
-        .route(
-            "/api/anime/ongoing_anime/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::ongoing_anime_slug),
-        )
-        .route(
-            "/api/anime/latest/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::latest_slug),
-        )
-        .route(
-            "/api/anime/search/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::search_slug_index),
-        )
-        .route(
-            "/api/anime/search/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::anime::search_slug_page),
-        )
-        .route(
-            "/api/anime/genre/{slug}",
-            axum::routing::get(crate::presentation::handler::anime::genre_slug_index),
-        )
-        .route(
-            "/api/anime/genre/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::anime::genre_slug_page),
-        )
-        // Anime2 routes
-        .route(
-            "/api/anime2",
-            axum::routing::get(crate::presentation::handler::anime2::index),
-        )
-        .route(
-            "/api/anime2/complete_anime/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::complete_anime_slug),
-        )
-        .route(
-            "/api/anime2/detail/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::detail_slug),
-        )
-        .route(
-            "/api/anime2/filter",
-            axum::routing::get(crate::presentation::handler::anime2::filter),
-        )
-        .route(
-            "/api/anime2/genre_list",
-            axum::routing::get(crate::presentation::handler::anime2::genre_list),
-        )
-        .route(
-            "/api/anime2/genre/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::genre_slug_index),
-        )
-        .route(
-            "/api/anime2/genre/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::anime2::genre_slug_page),
-        )
-        .route(
-            "/api/anime2/latest/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::latest_slug),
-        )
-        .route(
-            "/api/anime2/ongoing_anime/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::ongoing_anime_slug),
-        )
-        .route(
-            "/api/anime2/search/{slug}",
-            axum::routing::get(crate::presentation::handler::anime2::search_slug_index),
-        )
-        .route(
-            "/api/anime2/search/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::anime2::search_slug_page),
-        )
-        // Komik routes
-        .route(
-            "/api/komik/genre_list",
-            axum::routing::get(crate::presentation::handler::komik::genre_list),
-        )
-        .route(
-            "/api/komik/chapter/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::chapter_slug),
-        )
-        .route(
-            "/api/komik/detail/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::detail_slug),
-        )
-        .route(
-            "/api/komik/genre/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::genre_slug),
-        )
-        .route(
-            "/api/komik/genre/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::komik::genre_slug_page),
-        )
-        .route(
-            "/api/komik/manga/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::manga_slug),
-        )
-        .route(
-            "/api/komik/manhua/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::manhua_slug),
-        )
-        .route(
-            "/api/komik/manhwa/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::manhwa_slug),
-        )
-        .route(
-            "/api/komik/popular/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::popular_slug),
-        )
-        .route(
-            "/api/komik/search/{slug}",
-            axum::routing::get(crate::presentation::handler::komik::search_slug),
-        )
-        .route(
-            "/api/komik/search/{slug}/{page}",
-            axum::routing::get(crate::presentation::handler::komik::search_slug_page),
-        )
-        // Proxy routes
-        // (all proxy routes removed)
-        // Downloader routes
-        .route(
-            "/download",
-            axum::routing::get(crate::presentation::handler::downloader::download),
-        )
-        .route(
-            "/download/detect",
-            axum::routing::get(crate::presentation::handler::downloader::detect_platform_handler),
-        )
-        .route(
-            "/download/instagram",
-            axum::routing::get(crate::presentation::handler::downloader::download_instagram),
-        )
-        .route(
-            "/download/facebook",
-            axum::routing::get(crate::presentation::handler::downloader::download_facebook),
-        )
-        .route(
-            "/download/tiktok",
-            axum::routing::get(crate::presentation::handler::downloader::download_tiktok),
-        )
-        .route(
-            "/download/youtube",
-            axum::routing::get(crate::presentation::handler::downloader::download_youtube),
-        )
-        .route(
-            "/download/youtube/mp3",
-            axum::routing::get(crate::presentation::handler::downloader::download_youtube_mp3),
-        )
-        .route(
-            "/file/yt_merge/{filename}",
-            axum::routing::get(crate::presentation::handler::downloader::serve_merged_file),
-        )
-        .route(
-            "/download/spotify",
-            axum::routing::get(crate::presentation::handler::downloader::download_spotify),
-        )
-        .route(
-            "/download/twitter",
-            axum::routing::get(crate::presentation::handler::downloader::download_twitter),
-        )
-        .route(
-            "/download/pinterest",
-            axum::routing::get(crate::presentation::handler::downloader::download_pinterest),
-        )
-        .route(
-            "/download/mega",
-            axum::routing::get(crate::presentation::handler::downloader::download_mega),
-        )
-        .route(
-            "/download/terabox",
-            axum::routing::get(crate::presentation::handler::downloader::download_terabox),
-        )
-        .route(
-            "/proxy/terabox",
-            axum::routing::get(crate::presentation::handler::downloader::proxy_terabox),
-        )
-        .route(
-            "/download/gdrive",
-            axum::routing::get(crate::presentation::handler::downloader::download_gdrive),
-        )
-        .route(
-            "/download/mediafire",
-            axum::routing::get(crate::presentation::handler::downloader::download_mediafire),
-        )
-        .route(
-            "/download/pixeldrain",
-            axum::routing::get(crate::presentation::handler::downloader::download_pixeldrain),
-        )
-        .route(
-            "/download/threads",
-            axum::routing::get(crate::presentation::handler::downloader::download_threads),
-        )
-        .route(
-            "/download/dood",
-            axum::routing::get(crate::presentation::handler::downloader::download_doodstream),
-        )
-        .route(
-            "/download/kraken",
-            axum::routing::get(crate::presentation::handler::downloader::download_krakenfiles),
-        )
-        .route(
-            "/download/danbooru",
-            axum::routing::get(crate::presentation::handler::downloader::download_danbooru),
-        )
-        .route(
-            "/download/soundcloud",
-            axum::routing::get(crate::presentation::handler::downloader::download_soundcloud),
-        )
-        .route(
-            "/download/dailymotion",
-            axum::routing::get(crate::presentation::handler::downloader::download_dailymotion),
-        )
-        .route(
-            "/download/reddit",
-            axum::routing::get(crate::presentation::handler::downloader::download_reddit),
-        )
-        .route(
-            "/download/streamable",
-            axum::routing::get(crate::presentation::handler::downloader::download_streamable),
-        )
-        .route(
-            "/download/videy",
-            axum::routing::get(crate::presentation::handler::downloader::download_videy),
-        )
-        .route(
-            "/download/bilibili",
-            axum::routing::get(crate::presentation::handler::downloader::download_bilibili),
-        )
-        // Misc routes
-        .route(
-            "/misc/currency-converter",
-            axum::routing::get(crate::presentation::handler::misc::currency_converter_handler),
-        )
-        .route(
-            "/misc/harga-emas",
-            axum::routing::get(crate::presentation::handler::misc::harga_emas_handler),
-        )
-        .route(
-            "/misc/kurs-bca",
-            axum::routing::get(crate::presentation::handler::misc::kurs_bca_handler),
-        )
-        .route(
-            "/misc/server-info",
-            axum::routing::get(crate::presentation::handler::misc::server_info_handler),
-        )
-        // Stalk routes
-        .route(
-            "/stalk/github",
-            axum::routing::get(crate::presentation::handler::stalk::github_handler),
-        )
-        .route(
-            "/stalk/youtube",
-            axum::routing::get(crate::presentation::handler::stalk::youtube_handler),
-        )
-        .route(
-            "/stalk/twitter",
-            axum::routing::get(crate::presentation::handler::stalk::twitter_handler),
-        )
-        // Search routes
-        .route(
-            "/search/bmkg",
-            axum::routing::get(crate::presentation::handler::search::bmkg_handler),
-        )
-        .route(
-            "/search/jadwal-sholat",
-            axum::routing::get(crate::presentation::handler::search::jadwal_sholat_handler),
-        )
-        .route(
-            "/search/weather",
-            axum::routing::get(crate::presentation::handler::search::weather_handler),
-        )
-        .route(
-            "/search/google",
-            axum::routing::get(crate::presentation::handler::search::google_handler),
-        )
-        .route(
-            "/search/yt",
-            axum::routing::get(crate::presentation::handler::search::yt_handler),
-        )
-        // Tool routes
-        .route(
-            "/tool/whois",
-            axum::routing::get(crate::presentation::handler::tools::whois_handler),
-        )
-        .route(
-            "/tool/iplocation",
-            axum::routing::get(crate::presentation::handler::tools::ip_location_handler),
-        )
-        .route(
-            "/tool/tinyurl",
-            axum::routing::get(crate::presentation::handler::tools::tinyurl_handler),
-        )
-        .route(
-            "/tool/check-hosting",
-            axum::routing::get(crate::presentation::handler::tools::check_hosting_handler),
-        )
-        .route(
-            "/tool/hargapangan",
-            axum::routing::get(crate::presentation::handler::tools::hargapangan_handler),
-        )
-        .route(
-            "/tool/cek-resi",
-            axum::routing::get(crate::presentation::handler::tools::cek_resi_handler),
-        )
-        // Image routes
-        .route(
-            "/image/brat",
-            axum::routing::get(crate::presentation::handler::image::brat_handler),
-        )
-        .route(
-            "/image/brat/animated",
-            axum::routing::get(crate::presentation::handler::image::brat_animated_handler),
-        )
-        // Health
-        .route(
-            "/health",
-            axum::routing::get(crate::presentation::handler::health::health_check),
-        )
-        // Swagger UI
+    Router::new()
+        .nest("/api/anime", handler::anime::router())
+        .nest("/api/anime2", handler::anime2::router())
+        .nest("/api/komik", handler::komik::router())
+        .merge(handler::downloader::router())
+        .nest("/misc", handler::misc::router())
+        .nest("/stalk", handler::stalk::router())
+        .nest("/search", handler::search::router())
+        .nest("/tool", handler::tools::router())
+        .nest("/image", handler::image::router())
+        .merge(handler::health::router())
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", openapi))
-        .with_state(app_state)
-        .layer(axum::middleware::from_fn(
-            crate::observability::metrics::otel_metrics_middleware,
-        ))
+        .layer(axum::middleware::from_fn(otel_metrics_middleware))
         .layer(CompressionLayer::new().quality(CompressionLevel::Fastest))
-        .layer(CorsLayer::permissive());
-
-    Ok(app)
+        .layer(CorsLayer::permissive())
 }

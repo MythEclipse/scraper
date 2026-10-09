@@ -1,6 +1,8 @@
 //! Axum handlers for stalk (profile/user lookups).
 //!
 //! Ported from Shirokami-API `scraper/stalk/*.js`.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -89,4 +91,13 @@ pub async fn twitter_handler(
         .ok_or_else(|| AppError::BadRequest("Missing 'username' parameter".to_string()))?;
     let result = use_cases::twitter(&username).await?;
     Ok((StatusCode::OK, Json(result)))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/stalk` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/github", get(github_handler))
+        .route("/youtube", get(youtube_handler))
+        .route("/twitter", get(twitter_handler))
 }

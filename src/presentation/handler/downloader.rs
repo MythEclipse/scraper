@@ -3,6 +3,8 @@
 //! Each handler wraps an application-layer use case, parses request params,
 //! and returns a JSON response. Platform is auto-detected from the URL
 //! via the all-in-one dispatcher.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Query;
 use axum::Json;
@@ -738,4 +740,39 @@ pub async fn serve_merged_file(
         )
         .body(axum::body::Body::from(bytes))
         .map_err(|e| AppError::Internal(format!("build response: {e}")))?)
+}
+
+/// Downloader routes.
+///
+/// These span three mount points (`/download`, `/proxy`, `/file`), so they
+/// are merged as one flat router rather than nested under a single prefix.
+pub fn router() -> Router {
+    Router::new()
+        .route("/download", get(download))
+        .route("/download/detect", get(detect_platform_handler))
+        .route("/download/instagram", get(download_instagram))
+        .route("/download/facebook", get(download_facebook))
+        .route("/download/tiktok", get(download_tiktok))
+        .route("/download/youtube", get(download_youtube))
+        .route("/download/youtube/mp3", get(download_youtube_mp3))
+        .route("/file/yt_merge/{filename}", get(serve_merged_file))
+        .route("/download/spotify", get(download_spotify))
+        .route("/download/twitter", get(download_twitter))
+        .route("/download/pinterest", get(download_pinterest))
+        .route("/download/mega", get(download_mega))
+        .route("/download/terabox", get(download_terabox))
+        .route("/proxy/terabox", get(proxy_terabox))
+        .route("/download/gdrive", get(download_gdrive))
+        .route("/download/mediafire", get(download_mediafire))
+        .route("/download/pixeldrain", get(download_pixeldrain))
+        .route("/download/threads", get(download_threads))
+        .route("/download/dood", get(download_doodstream))
+        .route("/download/kraken", get(download_krakenfiles))
+        .route("/download/danbooru", get(download_danbooru))
+        .route("/download/soundcloud", get(download_soundcloud))
+        .route("/download/dailymotion", get(download_dailymotion))
+        .route("/download/reddit", get(download_reddit))
+        .route("/download/streamable", get(download_streamable))
+        .route("/download/videy", get(download_videy))
+        .route("/download/bilibili", get(download_bilibili))
 }

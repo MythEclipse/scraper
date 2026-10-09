@@ -1,4 +1,6 @@
 //! Health check endpoint.
+use axum::routing::get;
+use axum::Router;
 
 use axum::{http::StatusCode, Json};
 use serde::Serialize;
@@ -17,4 +19,9 @@ pub async fn health_check() -> (StatusCode, Json<HealthResponse>) {
             version: env!("CARGO_PKG_VERSION").to_string(),
         }),
     )
+}
+
+/// Liveness probe route.
+pub fn router() -> Router {
+    Router::new().route("/health", get(health_check))
 }

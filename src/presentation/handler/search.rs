@@ -1,6 +1,8 @@
 //! Axum handlers for search utilities.
 //!
 //! Ported from Shirokami-API `scraper/search/*.js`.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -119,4 +121,15 @@ pub async fn yt_handler(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let query = require(p.query.as_ref().or(p.q.as_ref()), "query")?;
     Ok((StatusCode::OK, Json(use_cases::yt_search(&query).await?)))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/search` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/bmkg", get(bmkg_handler))
+        .route("/jadwal-sholat", get(jadwal_sholat_handler))
+        .route("/weather", get(weather_handler))
+        .route("/google", get(google_handler))
+        .route("/yt", get(yt_handler))
 }

@@ -1,16 +1,44 @@
 pub mod setup;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::net::TcpListener;
+use std::time::Duration;
 
 use axum::Router;
-use sea_orm::Database;
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
 use crate::config::CONFIG;
 use crate::infrastructure::cache::redis_pool::get_redis_conn;
-use crate::presentation::state::AppState;
+
+/// Open the SeaORM pool, returning `None` instead of failing startup.
+///
+/// No request path issues a query today — every handler reads from upstream
+/// HTTP providers and Redis — so an unreachable database degrades the service
+/// rather than taking it down.
+async fn connect_database() -> Option<DatabaseConnection> {
+    let mut options = ConnectOptions::new(CONFIG.database_url.clone());
+    options
+        .max_connections(20)
+        .min_connections(1)
+        .connect_timeout(Duration::from_secs(CONFIG.db.connect_timeout_seconds))
+        .idle_timeout(Duration::from_secs(CONFIG.db.idle_timeout_seconds))
+        .acquire_timeout(Duration::from_secs(CONFIG.db.acquire_timeout_seconds))
+        .max_lifetime(Duration::from_secs(CONFIG.db.max_lifetime_seconds))
+        .sqlx_logging(CONFIG.log_level == "debug")
+        .map_sqlx_postgres_opts(|opts| opts.extra_float_digits(None));
+
+    match Database::connect(options).await {
+        Ok(connection) => {
+            tracing::info!("✓ SeaORM database connection established");
+            Some(connection)
+        }
+        Err(e) => {
+            tracing::error!("Failed to connect to database (continuing): {e}");
+            None
+        }
+    }
+}
 
 pub struct Application {
     pub port: u16,
@@ -62,45 +90,19 @@ impl Application {
             tracing::error!("[scheduler] failed to start daily cleanup: {e}");
         }
 
-        // Database
-        let mut opt = sea_orm::ConnectOptions::new(CONFIG.database_url.clone());
-        opt.max_connections(20)
-            .min_connections(1)
-            .connect_timeout(std::time::Duration::from_secs(
-                CONFIG.db.connect_timeout_seconds,
-            ))
-            .idle_timeout(std::time::Duration::from_secs(
-                CONFIG.db.idle_timeout_seconds,
-            ))
-            .acquire_timeout(std::time::Duration::from_secs(
-                CONFIG.db.acquire_timeout_seconds,
-            ))
-            .max_lifetime(std::time::Duration::from_secs(
-                CONFIG.db.max_lifetime_seconds,
-            ))
-            .sqlx_logging(CONFIG.log_level == "debug")
-            .map_sqlx_postgres_opts(|opts| opts.extra_float_digits(None));
-
-        let db = Database::connect(opt)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to connect to database: {}", e))?;
-        tracing::info!("✓ SeaORM database connection established");
-
-        // Schema & Seeding
-        if let Err(e) = crate::bootstrap::setup::init(&db).await {
-            tracing::error!("Failed to init DB schema: {}", e);
+        // Database. No request path issues a query today (every handler reads
+        // from upstream HTTP providers and Redis), so a failed connection is
+        // logged rather than fatal — the scraper is fully functional without
+        // it, and refusing to boot here would take the API down for a
+        // dependency nothing uses.
+        let db = connect_database().await;
+        if let Some(db) = db.as_ref() {
+            if let Err(e) = crate::bootstrap::setup::init(db).await {
+                tracing::error!("Failed to init DB schema: {}", e);
+            }
         }
 
-        // App State components
-        let db_arc = Arc::new(db);
-        let event_bus = Arc::new(crate::events::bus::new_event_bus());
-
-        let app_state = Arc::new(AppState {
-            db: db_arc.clone(),
-            event_bus: event_bus.clone(),
-        });
-
-        let app = crate::presentation::router::build_router(app_state.clone())?;
+        let app = crate::presentation::router::build_router();
 
         // Listener
         let port = CONFIG.server_port;

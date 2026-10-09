@@ -1,4 +1,6 @@
 //! Axum handlers for tool endpoints.
+use axum::routing::get;
+use axum::Router;
 
 use axum::extract::Query;
 use axum::http::StatusCode;
@@ -159,4 +161,16 @@ pub async fn cek_resi_handler(
         StatusCode::OK,
         Json(use_cases::cek_resi(resi, ekspedisi).await?),
     ))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/tool` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/whois", get(whois_handler))
+        .route("/iplocation", get(ip_location_handler))
+        .route("/tinyurl", get(tinyurl_handler))
+        .route("/check-hosting", get(check_hosting_handler))
+        .route("/hargapangan", get(hargapangan_handler))
+        .route("/cek-resi", get(cek_resi_handler))
 }

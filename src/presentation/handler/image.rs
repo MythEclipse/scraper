@@ -1,6 +1,8 @@
 //! Axum handlers for image generation endpoints.
 //!
 //! Returns raw image bytes with the proper Content-Type.
+use axum::routing::get;
+use axum::Router;
 
 use axum::body::Body;
 use axum::extract::Query;
@@ -65,4 +67,12 @@ pub async fn brat_animated_handler(Query(params): Query<BratParams>) -> Result<R
         .header(header::CONTENT_TYPE, "image/gif")
         .body(Body::from(bytes))
         .map_err(|e| AppError::Internal(format!("build response: {e}")))
+}
+
+/// Routes served by this module, relative to its mount point.
+/// Mounted at `/image` by [`crate::presentation::router`].
+pub fn router() -> Router {
+    Router::new()
+        .route("/brat", get(brat_handler))
+        .route("/brat/animated", get(brat_animated_handler))
 }
