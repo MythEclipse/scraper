@@ -25,6 +25,10 @@
 # Overrides (defaults are the production values; used for verification runs):
 #   RELEASES_DIR LAUNCHER_DIR CURRENT_LINK UNIT PORT HEALTH_URL DEPLOY_REPO_URL
 #   KEEP_RELEASES SKIP_RESTART=1
+#
+#   ARTIFACT_DIR     — directory holding the binary CI built (scraper +
+#                      scrape_media.py). When set, no checkout and no build
+#                      happen here. This is how CI invokes it.
 set -Eeuo pipefail
 
 REPO_URL="${DEPLOY_REPO_URL:-https://github.com/asepharyana/scraper.git}"
@@ -62,20 +66,20 @@ as_root() {
 }
 
 # ── toolchain ──────────────────────────────────────────────────────────────
-# CI reaches this box over SSH as a non-interactive `bash script.sh`, which
-# sources neither ~/.profile nor ~/.bashrc — so ~/.cargo/env never runs and
-# cargo is absent from a runner's PATH (verified: a clean-env shell finds no
-# cargo). Resolve it explicitly instead of trusting the inherited environment.
+# The release binary is COMPILED BY CI and shipped as an artifact, so this host
+# needs no Rust toolchain at all. That is the whole point: a release dir used to
+# be a full checkout with a 1GB target/ in it, so two retained releases cost 2GB
+# to keep 50MB of usable binaries.
 #
-# $HOME/.cargo/bin/cargo is a rustup PROXY: with RUSTUP_HOME/CARGO_HOME unset
-# (root's HOME, or any account other than the one that ran rustup) it exits
-# "could not choose a version of cargo to run". Both vars are exported so the
-# proxy resolves the toolchain regardless of which user SSHes in.
+# `ARTIFACT_DIR` is the directory CI uploads the built binary into. When it
+# holds a binary, deploy uses it and skips the build entirely.
+#
+# Fallback: with no artifact, the script still builds locally, so a manual
+# deploy (or a CI run that somehow skipped the build job) keeps working. That
+# path is what leaves a target/ behind, and the prune step at the end removes it.
+ARTIFACT_DIR="${ARTIFACT_DIR:-}"
 CARGO_HOME_DIR="${CARGO_HOME:-/home/code/.cargo}"
 RUSTUP_HOME_DIR="${RUSTUP_HOME:-/home/code/.rustup}"
-export CARGO_HOME="$CARGO_HOME_DIR"
-export RUSTUP_HOME="$RUSTUP_HOME_DIR"
-export PATH="${CARGO_HOME_DIR}/bin:$PATH"
 
 resolve_cargo() {
   if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1; then
@@ -85,16 +89,17 @@ resolve_cargo() {
   elif [ -x /usr/local/cargo/bin/cargo ]; then
     printf '%s\n' /usr/local/cargo/bin/cargo
   else
-    die "cargo not found or unusable (tried PATH, ${CARGO_HOME_DIR}/bin, /usr/local/cargo/bin)"
+    return 1
   fi
 }
-CARGO="$(resolve_cargo)"
 
-command -v git   >/dev/null 2>&1 || die "git not found on PATH"
-command -v curl  >/dev/null 2>&1 || die "curl not found on PATH"
-# Fail loudly NOW rather than three minutes into a release build.
-"$CARGO" --version >/dev/null 2>&1 || die "cargo present but unusable: $("$CARGO" --version 2>&1 | head -2)"
-log "cargo $("$CARGO" --version) | CARGO_HOME=$CARGO_HOME | user $(id -un)"
+CARGO=""
+command -v git  >/dev/null 2>&1 || die "git not found on PATH"
+command -v curl >/dev/null 2>&1 || die "curl not found on PATH"
+CARGO="$(resolve_cargo)" || CARGO=""
+log "user $(id -un) | cargo: ${CARGO:-<absent>} | artifact: ${ARTIFACT_DIR:-<none>}"
+
+command -v unzip >/dev/null 2>&1 || die "unzip not found on PATH (needed to unpack the CI artifact)"
 
 # ── state captured before we touch anything ────────────────────────────────
 PREV_TARGET=""
@@ -118,10 +123,16 @@ rollback() {
     as_root cp -f "$BACKUP_BIN" "${LAUNCHER_DIR}/scraper"
     as_root chmod 0555 "${LAUNCHER_DIR}/scraper"
     log "restored previous binary from ${BACKUP_BIN}"
-  elif [ -n "$PREV_TARGET" ] && [ -e "$PREV_TARGET/target/release/scraper" ]; then
+  elif [ -n "$PREV_TARGET" ] && [ -x "${PREV_TARGET}/scraper" ]; then
+    # Payload release (normal): the binary sits at the release root.
+    as_root cp -f "${PREV_TARGET}/scraper" "${LAUNCHER_DIR}/scraper"
+    as_root chmod 0555 "${LAUNCHER_DIR}/scraper"
+    log "restored previous binary from $PREV_TARGET"
+  elif [ -n "$PREV_TARGET" ] && [ -x "${PREV_TARGET}/target/release/scraper" ]; then
+    # Source checkout (releases made before the artifact switch).
     as_root cp -f "${PREV_TARGET}/target/release/scraper" "${LAUNCHER_DIR}/scraper"
     as_root chmod 0555 "${LAUNCHER_DIR}/scraper"
-    log "restored previous binary from ${PREV_TARGET}"
+    log "restored previous binary from $PREV_TARGET (source checkout)"
   else
     log "no previous binary to restore (nothing to roll back to)"
   fi
@@ -154,70 +165,110 @@ health_check() {
     -o /dev/null "$HEALTH_URL"
 }
 
-# ── 1. check out the release ───────────────────────────────────────────────
+# ── 1. the release payload ─────────────────────────────────────────────────
+# Two shapes, same downstream path:
+#
+#   artifact mode (normal)  — CI compiled the binary and uploaded it. The
+#     release dir holds the payload: the binary, scrape_media.py, and nothing
+#     else. No git checkout, no target/, no source.
+#   source mode (fallback) — no artifact was supplied, so clone the SHA and
+#     build here. Slower and leaves a target/ behind, but it keeps a manual
+#     deploy working without touching CI.
+#
+# Either way the release dir ends up self-contained and small, because the
+# binary is COPIED into $LAUNCHER_DIR below and nothing at runtime reads the
+# release dir (verified: the crate reads /proc, .env and external paths, no
+# embedded assets).
 RELEASE_DIR="${RELEASES_DIR}/${SHA}"
-if [ -d "${RELEASE_DIR}/.git" ]; then
-  log "reusing existing checkout $RELEASE_DIR"
-else
-  if [ ! -d "$RELEASES_DIR" ]; then
-    as_root mkdir -p "$RELEASES_DIR"
-  fi
-  if [ ! -w "$RELEASES_DIR" ]; then
-    as_root chown "$(id -u):$(id -g)" "$RELEASES_DIR"
-  fi
-  log "cloning $SHA from $REPO_URL"
-  rm -rf "$RELEASE_DIR"
-  mkdir -p "$RELEASE_DIR"
-  git -C "$RELEASE_DIR" init -q
-  git -C "$RELEASE_DIR" remote add origin "$REPO_URL"
-  if ! git -C "$RELEASE_DIR" fetch --quiet --depth 1 origin "$SHA" 2>/dev/null; then
-    # Some servers refuse direct SHA fetches; fall back to the branch and walk
-    # back to the commit. The depth is generous on purpose (SHAs land on main).
-    log "direct SHA fetch refused; fetching $REF instead"
-    git -C "$RELEASE_DIR" fetch --quiet --depth 500 origin \
-      "+refs/heads/${REF}:refs/remotes/origin/${REF}" \
-      || die "could not fetch $REF from $REPO_URL"
-  fi
-  git -C "$RELEASE_DIR" checkout --quiet --detach "$SHA" \
-    || git -C "$RELEASE_DIR" checkout --quiet --detach FETCH_HEAD \
-    || die "commit $SHA not found in $REPO_URL"
-fi
-[ -f "$RELEASE_DIR/Cargo.toml" ] || die "$RELEASE_DIR is not a checkout of scraper"
-# `|| echo "$SHA"` matters: this is a diagnostic, and under the ERR trap a
-# failing command substitution inside log() would abort an otherwise good deploy.
-log "checked out $(git -C "$RELEASE_DIR" rev-parse --short HEAD 2>/dev/null || echo "$SHA")"
+PAYLOAD_ONLY=0
 
-# ── 2. build on the target ─────────────────────────────────────────────────
-# A native binary must be compiled where it runs: Ubuntu 26.04 glibc, and the
-# openssl-sys link against the host's libssl. A CI-runner artifact would risk a
-# glibc mismatch that only shows up as a failed execve on restart.
-if [ -x "${RELEASE_DIR}/target/release/scraper" ] \
-   && [ "${RELEASE_DIR}/target/release/scraper" -nt "${RELEASE_DIR}/Cargo.toml" ]; then
-  log "release binary already built in $RELEASE_DIR — reusing"
+if [ -n "$ARTIFACT_DIR" ] && [ -x "${ARTIFACT_DIR}/scraper" ]; then
+  log "artifact mode: using the binary CI built ($(stat -c '%s bytes' "${ARTIFACT_DIR}/scraper"))"
+  as_root mkdir -p "$RELEASE_DIR"
+  as_root cp -f "${ARTIFACT_DIR}/scraper" "${RELEASE_DIR}/scraper"
+  # scrape_media.py is read at runtime by the Playwright fallback, so it must
+  # ship next to the binary (src/infrastructure/repository/downloader/shared.rs).
+  [ -f "${ARTIFACT_DIR}/scrape_media.py" ] \
+    || die "CI artifact is missing scrape_media.py"
+  as_root cp -f "${ARTIFACT_DIR}/scrape_media.py" "${RELEASE_DIR}/scrape_media.py"
+  BIN_SRC="${RELEASE_DIR}/scraper"
+  SCRIPT_SRC="${RELEASE_DIR}/scrape_media.py"
+  PAYLOAD_ONLY=1
 else
-  (
-    cd "$RELEASE_DIR"
-    log "cargo build --release --locked ($CARGO)"
-    "$CARGO" build --release --locked
-  )
-fi
-[ -x "${RELEASE_DIR}/target/release/scraper" ] || die "cargo build produced no release binary"
-BIN_SRC="${RELEASE_DIR}/target/release/scraper"
-log "binary: $(stat -c '%s bytes' "$BIN_SRC")"
+  [ -n "$ARTIFACT_DIR" ] && log "WARNING: ARTIFACT_DIR set but no binary in it — falling back to a host build"
+  [ -n "$CARGO" ] || die "no CI artifact and no local cargo — cannot build scraper. Set ARTIFACT_DIR or install cargo."
+  PAYLOAD_ONLY=0
 
-# scrape_media.py ships next to the binary: run_playwright_scraper() looks there
-# first (src/infrastructure/repository/downloader/shared.rs), and that lookup is
-# the only reason the Playwright fallback worked under Nix, whose installPhase
-# copied it into $out/bin.
-[ -f "${RELEASE_DIR}/scrape_media.py" ] || die "scrape_media.py missing from $RELEASE_DIR"
-SCRIPT_SRC="${RELEASE_DIR}/scrape_media.py"
+  if [ -d "${RELEASE_DIR}/.git" ]; then
+    log "reusing existing checkout $RELEASE_DIR"
+  else
+    if [ ! -d "$RELEASES_DIR" ]; then
+      as_root mkdir -p "$RELEASES_DIR"
+    fi
+    if [ ! -w "$RELEASES_DIR" ]; then
+      as_root chown "$(id -u):$(id -g)" "$RELEASES_DIR"
+    fi
+    log "cloning $SHA from $REPO_URL"
+    rm -rf "$RELEASE_DIR"
+    mkdir -p "$RELEASE_DIR"
+    git -C "$RELEASE_DIR" init -q
+    git -C "$RELEASE_DIR" remote add origin "$REPO_URL"
+    if ! git -C "$RELEASE_DIR" fetch --quiet --depth 1 origin "$SHA" 2>/dev/null; then
+      # Some servers refuse direct SHA fetches; fall back to the branch and walk
+      # back to the commit. The depth is generous on purpose (SHAs land on main).
+      log "direct SHA fetch refused; fetching $REF instead"
+      git -C "$RELEASE_DIR" fetch --quiet --depth 500 origin \
+        "+refs/heads/${REF}:refs/remotes/origin/${REF}" \
+        || die "could not fetch $REF from $REPO_URL"
+    fi
+    git -C "$RELEASE_DIR" checkout --quiet --detach "$SHA" \
+      || git -C "$RELEASE_DIR" checkout --quiet --detach FETCH_HEAD \
+      || die "commit $SHA not found in $REPO_URL"
+  fi
+  [ -f "$RELEASE_DIR/Cargo.toml" ] || die "$RELEASE_DIR is not a checkout of scraper"
+  log "checked out $(git -C "$RELEASE_DIR" rev-parse --short HEAD 2>/dev/null || echo "$SHA")"
+
+  # ── 2. build here (fallback path only) ────────────────────────────────────
+  # A native binary normally is compiled by CI. This exists so a manual deploy
+  # still works, and so a CI run whose artifact step failed loudly here rather
+  # than quietly shipping a stale binary.
+  if [ -x "${RELEASE_DIR}/target/release/scraper" ] \
+     && [ "${RELEASE_DIR}/target/release/scraper" -nt "${RELEASE_DIR}/Cargo.toml" ]; then
+    log "release binary already built in $RELEASE_DIR — reusing"
+  else
+    export CARGO_HOME="$CARGO_HOME_DIR" RUSTUP_HOME="$RUSTUP_HOME_DIR"
+    ( cd "$RELEASE_DIR" && log "cargo build --release --locked" && "$CARGO" build --release --locked )
+  fi
+  [ -x "${RELEASE_DIR}/target/release/scraper" ] || die "cargo build produced no release binary"
+  BIN_SRC="${RELEASE_DIR}/target/release/scraper"
+  log "binary: $(stat -c '%s bytes' "$BIN_SRC")"
+
+  # scrape_media.py ships next to the binary: run_playwright_scraper() looks there
+  # first, and that lookup is the only reason the Playwright fallback worked.
+  [ -f "${RELEASE_DIR}/scrape_media.py" ] || die "scrape_media.py missing from $RELEASE_DIR"
+  SCRIPT_SRC="${RELEASE_DIR}/scrape_media.py"
+fi
+
+[ -x "$BIN_SRC" ] || die "no release binary at $BIN_SRC"
+
+# In fallback mode the build left a ~1GB target/ in the release. The binary is
+# COPIED into $LAUNCHER_DIR by the activate step, and nothing reads the release
+# dir at runtime, so it can go now rather than waiting for the prune — otherwise
+# a manual deploy keeps a gigabyte per release for no reason.
+if [ "$PAYLOAD_ONLY" = "0" ] && [ -d "${RELEASE_DIR}/target" ]; then
+  log "dropping build cache ${RELEASE_DIR}/target ($(du -sh "${RELEASE_DIR}/target" 2>/dev/null | cut -f1))"
+  as_root rm -rf "${RELEASE_DIR}/target"
+fi
 
 # ── 3. activate ────────────────────────────────────────────────────────────
 # The binary is copied, not symlinked: systemd's ExecStart reads /opt/scraper/bin
 # directly, and a half-written executable must never be the one a restart picks
 # up. Copy to a temp name in the same dir, chmod, then rename(2) into place.
 log "activating $RELEASE_DIR"
-if [ -f "${LAUNCHER_DIR}/scraper" ]; then
+# LAUNCHER_DIR is created rather than assumed: a first deploy into a fresh dir
+# failed on `cp: cannot create .../.scraper.new`.
+as_root mkdir -p "$LAUNCHER_DIR"
+if [ -f "$LAUNCHER_DIR/scraper" ]; then
   as_root cp -f "${LAUNCHER_DIR}/scraper" "$BACKUP_BIN"
 fi
 NEW_LINK="${CURRENT_LINK}.new.$$"
@@ -233,7 +284,12 @@ elif [ -e "$CURRENT_LINK" ]; then
 else
   as_root mv -Tf "$NEW_LINK" "$CURRENT_LINK"
 fi
-[ -e "${CURRENT_LINK}/Cargo.toml" ] || die "$CURRENT_LINK does not point at a release"
+# A payload release carries the binary at its root; a source checkout (the
+# fallback path) has it under target/. Either satisfies this — asserting
+# Cargo.toml would fail every artifact-mode deploy.
+[ -x "${CURRENT_LINK}/scraper" ] \
+  || [ -x "${CURRENT_LINK}/target/release/scraper" ] \
+  || die "$CURRENT_LINK does not point at a release"
 
 as_root cp -f "$BIN_SRC" "${LAUNCHER_DIR}/.scraper.new"
 as_root chmod 0555 "${LAUNCHER_DIR}/.scraper.new"

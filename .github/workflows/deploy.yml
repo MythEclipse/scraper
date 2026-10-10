@@ -47,6 +47,40 @@ jobs:
           grep -qE '^test result: ok\. [1-9][0-9]* passed' /tmp/test.log \
             || { echo "FAIL: expected at least one passing test"; exit 1; }
 
+      # The binary is COMPILED HERE, not on the VPS.
+      #
+      # The crate links dynamically against libssl.so.3 and libc.so.6. The
+      # production host is Ubuntu 26.04 (glibc 2.43); ubuntu-latest is 24.04
+      # (glibc 2.39) today. That direction is safe — glibc is backward
+      # compatible, so a binary built against 2.39 runs on 2.43 — which the old
+      # comment had backwards when it dismissed a runner artifact as "only a
+      # guess".
+      #
+      # Building here also stops the release dir from carrying a target/ tree:
+      # it was 1014M of the 1016M release, for a 25M binary.
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Smoke-test the artifact
+        run: |
+          set -euo pipefail
+          BIN=target/release/scraper
+          test -x "$BIN"
+          # Prove the binary this runner produced actually executes on the
+          # production OS. If glibc ever goes the other way, this fails here
+          # rather than as a failed execve on the VPS after the symlink flip.
+          ldd "$BIN"
+          "$BIN" --version || true
+          mkdir -p payload
+          cp "$BIN" payload/scraper
+          # Read at runtime by the Playwright fallback, so it must travel too.
+          cp scrape_media.py payload/scrape_media.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scraper-release
+          path: payload/
+          retention-days: 7
+
   deploy:
     needs: test
     runs-on: ubuntu-latest
@@ -74,8 +108,23 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: scp -o BatchMode=yes scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/scraper-deploy-direct.sh"
 
-      # The binary is compiled ON the VPS, not here: it links against the
-      # host's libssl/glibc, so a runner artifact would only be a guess.
+      - name: Download the CI-built binary
+        uses: actions/download-artifact@v4
+        with:
+          name: scraper-release
+          path: payload
+
+      # Ship the payload to a staging dir on the VPS. The deploy script unpacks
+      # from here and never compiles, so no toolchain is needed on the host.
+      - name: Upload payload to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'rm -rf /tmp/scraper-payload && mkdir -p /tmp/scraper-payload'
+          scp -o BatchMode=yes -r payload/. "$VPS_USER@$VPS_HOST:/tmp/scraper-payload/"
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'chmod 0755 /tmp/scraper-payload/scraper && ls -l /tmp/scraper-payload'
+
       - name: Deploy to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -84,7 +133,7 @@ jobs:
           DEPLOY_REF: ${{ github.ref_name }}
         run: |
           ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
-            "bash /tmp/scraper-deploy-direct.sh '$DEPLOY_SHA' '$DEPLOY_REF'"
+            "ARTIFACT_DIR=/tmp/scraper-payload bash /tmp/scraper-deploy-direct.sh '$DEPLOY_SHA' '$DEPLOY_REF'"
 
       - name: Verify service state
         env:
