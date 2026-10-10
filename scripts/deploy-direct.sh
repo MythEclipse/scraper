@@ -35,7 +35,8 @@ PREV_DIR="${CURRENT_LINK}.previous"
 UNIT="${UNIT:-scraper}"
 PORT="${PORT:-4091}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${PORT}/health}"
-KEEP_RELEASES="${KEEP_RELEASES:-5}"
+# Total on disk, live included: 2 = the live release + one rollback target.
+KEEP_RELEASES="${KEEP_RELEASES:-2}"
 SKIP_RESTART="${SKIP_RESTART:-0}"
 
 log() { printf '[deploy] %s\n' "$*"; }
@@ -268,18 +269,53 @@ else
 fi
 
 # ── 6. prune old releases ──────────────────────────────────────────────────
-active_target="$(readlink "$CURRENT_LINK")"
-kept=0
-while IFS= read -r dir; do
-  [ -n "$dir" ] || continue
-  [ "$dir" = "$active_target" ] && continue
-  [ "$dir" = "$RELEASE_DIR" ] && continue
-  [ "$dir" = "$PREV_DIR" ] && continue
-  kept=$((kept + 1))
-  if [ "$kept" -gt "$KEEP_RELEASES" ]; then
-    log "pruning old release $(basename "$dir")"
-    as_root rm -rf "$dir"
-  fi
-done < <(ls -1dt "$RELEASES_DIR"/*/ 2>/dev/null || true)
+# Keep the live release plus exactly ONE rollback target.
+#
+# A rollback is `ln -sfn releases/<prev> current && systemctl restart`, which
+# needs only the single previous release on disk. Everything older is
+# unreachable, so a higher cap buys nothing and costs a full checkout per
+# deploy — this was 3 x ~1G for this project alone.
+#
+# Runs LAST, after the health check, and that ordering is load-bearing: pruning
+# first would destroy the rollback target of the release you are rolling back
+# TO, turning a failed deploy into an unrecoverable one.
+#
+# `current` is resolved to its basename before comparing: readlink returns the
+# absolute path while the loop yields `dir/` with a trailing slash, so a string
+# compare against the raw target can never match and the LIVE release would be
+# pruned on mtime order alone.
+#
+# KEEP_RELEASES is the TOTAL on disk, live included — not "the newest N, plus
+# the live one", which yields N+1 whenever the live release is older than the N
+# newest, exactly the rollback case this cap exists to support.
+log "pruning old releases (keeping live + 1 rollback)"
+LIVE_SHA="$(basename "$(readlink -f "$CURRENT_LINK" 2>/dev/null || echo "")")"
+[ -n "$LIVE_SHA" ] || die "could not resolve the live release from $CURRENT_LINK"
 
-log "done: $CURRENT_LINK -> $active_target"
+mapfile -t KEEP < <(
+  ls -1dt "$RELEASES_DIR"/*/ 2>/dev/null \
+    | while read -r d; do printf '%s\t%s\n' "$(stat -c %Y "$d")" "$(basename "$d")"; done \
+    | sort -rn \
+    | cut -f2 \
+    | while read -r name; do
+        [ "$name" = "$LIVE_SHA" ] && continue
+        printf '%s\n' "$name"
+      done \
+    | head -n "$((KEEP_RELEASES - 1))"
+)
+log "  keeping: live=$LIVE_SHA + ${KEEP[*]:-<none>}"
+
+for dir in "$RELEASES_DIR"/*/; do
+  [ -d "$dir" ] || continue
+  name="$(basename "$dir")"
+  [ "$name" = "$LIVE_SHA" ] && continue
+  [ "$name" = "$(basename "$RELEASE_DIR")" ] && continue
+  if printf '%s\n' "${KEEP[@]:-}" | grep -qx "$name"; then
+    continue
+  fi
+  log "  pruning $name ($(du -sh "$dir" 2>/dev/null | cut -f1))"
+  as_root rm -rf "$dir"
+done
+log "  releases now: $(ls -1 "$RELEASES_DIR" 2>/dev/null | wc -l)"
+
+log "done: $CURRENT_LINK -> $LIVE_SHA"
