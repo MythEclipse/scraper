@@ -1,0 +1,82 @@
+# Build context for the scraper-service image.
+#
+# Every entry here is either (a) large, (b) a build output that would be
+# COPYed into the image stale, or (c) secret material that must never reach a
+# layer. The Docker build only needs: src/, Cargo.toml, Cargo.lock,
+# scrape_media.py, and the Dockerfile itself.
+
+# Build outputs — the image compiles its own. Note the repo .gitignore uses
+# `**/target/**`, which .dockerignore patterns do NOT inherit, so target/ is
+# listed explicitly. Sending the host's 1GB target/ would be pure waste.
+target/
+**/target/
+
+# Dependencies and VCS metadata
+node_modules/
+**/node_modules/
+.git/
+.gitignore
+.github/
+**/.git/
+
+# Secrets and environment — these must never be baked into a layer, where they
+# persist in the image history even if a later RUN deletes them.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+secrets/
+**/secrets/
+
+# Logs and caches
+*.log
+**/*.log
+.cache/
+**/.cache/
+
+# Editor / OS noise
+.vscode/
+.idea/
+**/.vscode/
+**/.idea/
+.DS_Store
+Thumbs.db
+
+# Deploy + CI plumbing that has no business in a runtime image
+deploy/
+infra/
+scripts/
+ecosystem.config.cjs
+check_image_cache_db.sh
+Dockerfile
+.dockerignore
+
+# Tests are not run in the image; excluding them keeps the context small and
+# keeps test-only dev-dependencies (sea-orm "mock") out of the build.
+tests/
+**/tests/
+**/*.test.rs
+
+# Python helpers that are NOT the Playwright fallback this service shells out
+# to. scrape_media.py is deliberately NOT excluded — Dockerfile copies it into
+# the runtime layer, because downloader/shared.rs resolves it next to the
+# running binary.
+stalk_tiktok.py
+**/stalk_tiktok.py
+**/__pycache__/
+**/*.pyc
+
+# Docs and markdown scratch/notes — not runtime input.
+docs/
+**/docs/
+**/*.md
+!README.md
+
+# infra/ and tooling
+tools/
+**/tools/
+**/node_modules/**/.bin/
+moon.yml
+.moon/
