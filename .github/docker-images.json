@@ -1,0 +1,9 @@
+{
+  "images": [
+    {
+      "package": "scraper",
+      "context": ".",
+      "file": "Dockerfile"
+    }
+  ]
+}
