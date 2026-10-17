@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/asepharyana/scraper/compare/v1.0.1...v1.0.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **ci:** gate deploy on github.ref, not event_name — a dispatch can target a branch ([1a00f22](https://github.com/asepharyana/scraper/commit/1a00f22c9db914f5d100c62f778ea36fce57a986))
+
 ## [1.0.1](https://github.com/asepharyana/scraper/compare/v1.0.0...v1.0.1) (2026-10-14)
 
 # 1.0.0 (2026-10-14)
