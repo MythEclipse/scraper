@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/MythEclipse/scraper/compare/v1.0.3...v1.0.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* **deploy:** fetch the deploy ref from MythEclipse ([d60137f](https://github.com/MythEclipse/scraper/commit/d60137fecc04db23e44fe9ded5f74cf8968f7dec))
+
 ## [1.0.3](https://github.com/MythEclipse/scraper/compare/v1.0.2...v1.0.3) (2026-11-01)
 
 ## [1.0.2](https://github.com/asepharyana/scraper/compare/v1.0.1...v1.0.2) (2026-10-17)
