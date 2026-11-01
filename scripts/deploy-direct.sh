@@ -31,7 +31,7 @@
 #                      happen here. This is how CI invokes it.
 set -Eeuo pipefail
 
-REPO_URL="${DEPLOY_REPO_URL:-https://github.com/asepharyana/scraper.git}"
+REPO_URL="${DEPLOY_REPO_URL:-https://github.com/MythEclipse/scraper.git}"
 RELEASES_DIR="${RELEASES_DIR:-/opt/scraper/releases}"
 LAUNCHER_DIR="${LAUNCHER_DIR:-/opt/scraper/bin}"
 CURRENT_LINK="${CURRENT_LINK:-/opt/scraper/current}"
