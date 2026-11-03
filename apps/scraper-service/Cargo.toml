@@ -9,11 +9,11 @@ repository = "https://github.com/MythEclipse/ultimate-asepharyana.tech"
 
 # Dependensi yang dibutuhkan saat aplikasi berjalan
 [dependencies]
-# Mytheclipse workspace (user's custom library). All crates are published on
-# crates.io, so the scraper tracks the released crates via version deps:
+# Mytheclipse crates (https://github.com/MythEclipse/mytheclipse-crates), all
+# consumed from crates.io so the scraper tracks released versions:
 # core/cache/event/queue/tracing 5.1. Config loading is local (src/config) —
-# mytheclipse-config is deprecated upstream, so `toml` + serde_json do the
-# file/env merge instead.
+# mytheclipse-config is retired, so `toml` + serde_json do the file/env merge
+# instead of reviving that crate.
 mytheclipse = { version = "5.1", features = ["full"] }
 mytheclipse-cache = { version = "5.1", features = ["l2-redis", "cache-aside"] }
 mytheclipse-event = { version = "5.1", features = ["typed"] }
