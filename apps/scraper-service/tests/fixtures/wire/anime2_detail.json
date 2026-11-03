@@ -1,0 +1,25 @@
+{
+  "title": "Frieren",
+  "slug": "frieren",
+  "poster": "https://cdn.example/frieren.jpg",
+  "poster2": "https://cdn.example/frieren-2.jpg",
+  "synopsis": "An elf mage retraces a journey.",
+  "alternative_title": "Sousou no Frieren",
+  "type": "TV",
+  "status": "Completed",
+  "score": "9.3",
+  "genres": [
+    {
+      "name": "Adventure",
+      "slug": "adventure",
+      "anime_url": "https://alqanime.example/genre/adventure"
+    }
+  ],
+  "episodes": [
+    {
+      "episode": "Episode 1",
+      "slug": "episode-1"
+    }
+  ],
+  "recommendations": []
+}

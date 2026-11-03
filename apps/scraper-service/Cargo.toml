@@ -1,0 +1,83 @@
+[package]
+name = "scraper-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Scraping service domain library (Axum + SeaORM clean architecture)"
+repository = "https://github.com/MythEclipse/ultimate-asepharyana.tech"
+
+# Dependensi yang dibutuhkan saat aplikasi berjalan
+[dependencies]
+# Mytheclipse workspace (user's custom library). All crates are published on
+# crates.io, so the scraper tracks the released crates via version deps:
+# core/cache/event/queue/tracing 5.1. Config loading is local (src/config) —
+# mytheclipse-config is deprecated upstream, so `toml` + serde_json do the
+# file/env merge instead.
+mytheclipse = { version = "5.1", features = ["full"] }
+mytheclipse-cache = { version = "5.1", features = ["l2-redis", "cache-aside"] }
+mytheclipse-event = { version = "5.1", features = ["typed"] }
+mytheclipse-queue = { version = "5.1", features = ["in-memory"] }
+mytheclipse-tracing = { version = "5.1", features = ["env"] }
+toml = "0.8"
+
+axum = { version = "0.8.8", features = ["ws", "multipart", "macros"] }
+tokio = { version = "1.49.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+# sqlx removed - SeaORM uses it internally via sqlx-postgres feature
+sea-orm = { version = "1.1.19", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+futures = "0.3"
+reqwest = { version = "0.12.28", features = ["json", "stream", "multipart"] }
+http = "1.4.0"
+regex = "1.12.2"
+
+urlencoding = "2.1"
+url = "2.5.8"
+base64 = "0.22"
+cipher = "0.4"
+aes = "0.8"
+cbc = "0.1"
+block-padding = "0.3"
+hex = "0.4"
+fastrand = "2.0"
+
+tower-http = { version = "0.6.8", features = ["fs", "cors", "compression-gzip", "compression-br", "compression-zstd"] }
+dashmap = "6.1"
+deadpool-redis = { version = "0.22.1", features = ["serde"] }
+rayon = "1.12"
+scraper = "0.25.0"
+flate2 = "1.1"
+redis = { version = "0.32.7", features = ["tokio-rustls-comp", "safe_iterators"] }
+thiserror = "2.0.18"
+# Request validation: schema derives with #[zod(..)] field constraints.
+zod-rs = "1.1"
+
+utoipa = { version = "5.0", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+
+# OpenTelemetry metrics
+opentelemetry = { version = "0.28", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.28", features = ["metrics", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.28", features = ["metrics"] }
+
+[dev-dependencies]
+sea-orm = { version = "1.1.19", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid", "mock"] }
+
+[lib]
+name = "scraper_service"
+path = "src/lib.rs"
+
+[features]
+# default = ["ffmpeg"]
+ffmpeg = []
+
+[lints]
+workspace = true

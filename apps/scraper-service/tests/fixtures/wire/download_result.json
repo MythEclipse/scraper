@@ -1,0 +1,26 @@
+{
+  "status": "success",
+  "title": "Frieren EP1",
+  "author": "Madhouse",
+  "thumbnail": "https://cdn.example/frieren.jpg",
+  "description": "Episode 1",
+  "media": [
+    {
+      "url": "https://cdn.example/frieren-720.mp4",
+      "quality": "720p",
+      "file_type": "Video",
+      "extension": "mp4",
+      "file_size": "120MB",
+      "size_bytes": 125829120,
+      "frame_width": "1280",
+      "frame_height": "720"
+    },
+    {
+      "url": "https://cdn.example/frieren.mp3",
+      "file_type": "Audio",
+      "extension": "mp3",
+      "note": "audio only"
+    }
+  ],
+  "provider": "savetube"
+}

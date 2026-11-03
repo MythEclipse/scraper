@@ -1,0 +1,23 @@
+{
+  "episode": "Episode 1",
+  "episode_number": "1",
+  "anime": {
+    "slug": "sousou-no-frieren"
+  },
+  "has_next_episode": true,
+  "next_episode": {
+    "slug": "episode-2"
+  },
+  "has_previous_episode": false,
+  "previous_episode": null,
+  "stream_url": "https://stream.example/embed/1",
+  "download_urls": {
+    "720p": [
+      {
+        "server": "Mega",
+        "url": "https://mega.example/frieren-720"
+      }
+    ]
+  },
+  "image_url": "https://cdn.example/frieren-1.jpg"
+}

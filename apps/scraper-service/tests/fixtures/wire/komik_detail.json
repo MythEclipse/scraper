@@ -1,0 +1,21 @@
+{
+  "title": "One Piece",
+  "poster": "https://cdn.example/op.jpg",
+  "description": "Pirates.",
+  "status": "Ongoing",
+  "type": "Manga",
+  "release_date": "1997",
+  "author": "Eiichiro Oda",
+  "total_chapter": "1100",
+  "updated_on": "2024-01-01",
+  "genres": [
+    "Action"
+  ],
+  "chapters": [
+    {
+      "chapter": "Chapter 1100",
+      "date": "2024-01-01",
+      "chapter_id": "ch-1100"
+    }
+  ]
+}

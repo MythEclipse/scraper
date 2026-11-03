@@ -1,0 +1,21 @@
+[package]
+name = "scraper-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Scraping service binary — assembles the router and runs the server"
+repository = "https://github.com/MythEclipse/ultimate-asepharyana.tech"
+default-run = "scraper"
+
+[dependencies]
+scraper-service = { path = "../scraper-service" }
+tokio = { version = "1.49.0", features = ["full"] }
+anyhow = "1.0"
+
+[[bin]]
+name = "scraper"
+path = "src/main.rs"
+
+[lints]
+workspace = true

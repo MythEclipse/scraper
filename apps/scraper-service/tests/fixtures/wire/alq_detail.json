@@ -1,0 +1,52 @@
+{
+  "title": "Frieren",
+  "alternative_title": "Sousou no Frieren",
+  "poster": "https://cdn.example/frieren.jpg",
+  "poster2": "https://cdn.example/frieren-2.jpg",
+  "type": "TV",
+  "release_date": "2023",
+  "status": "Completed",
+  "synopsis": "An elf mage retraces a journey.",
+  "studio": "Madhouse",
+  "genres": [
+    {
+      "name": "Adventure",
+      "slug": "adventure",
+      "anime_url": "https://alqanime.example/genre/adventure"
+    }
+  ],
+  "producers": [
+    "Madhouse"
+  ],
+  "recommendations": [
+    {
+      "title": "Bocchi the Rock!",
+      "slug": "bocchi",
+      "poster": "https://cdn.example/bocchi.jpg",
+      "status": "Completed",
+      "type": "TV"
+    }
+  ],
+  "batch": [
+    {
+      "resolution": "720p",
+      "links": [
+        {
+          "name": "Mega",
+          "url": "https://mega.example/frieren-batch"
+        }
+      ]
+    }
+  ],
+  "ova": [],
+  "downloads": [],
+  "episodes": [
+    {
+      "episode": "Episode 1",
+      "title": "The Journey's End",
+      "url": "https://alqanime.example/episode-1",
+      "date": "2023-09-29",
+      "download_url": null
+    }
+  ]
+}

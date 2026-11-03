@@ -2,7 +2,7 @@
 #
 # Every entry here is either (a) large, (b) a build output that would be
 # COPYed into the image stale, or (c) secret material that must never reach a
-# layer. The Docker build only needs: src/, Cargo.toml, Cargo.lock,
+# layer. The Docker build only needs: apps/, Cargo.toml, Cargo.lock,
 # scrape_media.py, and the Dockerfile itself.
 
 # Build outputs — the image compiles its own. Note the repo .gitignore uses

@@ -63,13 +63,18 @@ WORKDIR /build
 # Dependency layer first, so a source-only change does not refetch the registry.
 # This crate pulls ~200 crates (mytheclipse full + axum + sea-orm + tokio);
 # keeping them in their own layer is what makes rebuilds bearable.
+# Workspace manifests first: the dependency layer must resolve against the same
+# member list the real build uses, so stub sources for BOTH crates are created
+# before `cargo fetch`.
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src \
- && echo 'fn main() {}' > src/main.rs \
- && echo '' > src/lib.rs \
+COPY apps/scraper-service/Cargo.toml apps/scraper-service/
+COPY apps/gateway/Cargo.toml apps/gateway/
+RUN mkdir -p apps/scraper-service/src apps/gateway/src \
+ && echo '' > apps/scraper-service/src/lib.rs \
+ && echo 'fn main() {}' > apps/gateway/src/main.rs \
  && cargo fetch --locked
 
-COPY src ./src
+COPY apps ./apps
 
 # --locked: refuse to touch Cargo.lock, matching CI exactly.
 # --release: opt-level 3 + fat LTO + codegen-units 1 + strip, as Cargo.toml asks.

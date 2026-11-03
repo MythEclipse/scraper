@@ -1,0 +1,31 @@
+{
+  "title": "Sousou no Frieren",
+  "alternative_title": "Frieren: Beyond Journey's End",
+  "poster": "https://cdn.example/frieren.jpg",
+  "type": "TV",
+  "status": "Completed",
+  "release_date": "2023",
+  "studio": "Madhouse",
+  "genres": [
+    {
+      "name": "Adventure",
+      "slug": "adventure",
+      "anime_url": "https://otakudesu.example/genre/adventure"
+    }
+  ],
+  "synopsis": "An elf mage retraces a journey.",
+  "episode_lists": [
+    {
+      "episode": "Episode 1",
+      "slug": "episode-1"
+    }
+  ],
+  "recommendations": [
+    {
+      "title": "Bocchi the Rock!",
+      "slug": "bocchi",
+      "poster": "https://cdn.example/bocchi.jpg",
+      "type": "TV"
+    }
+  ]
+}
