@@ -8,9 +8,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use mytheclipse_queue::backpressure_enqueue::BackpressureEnforcer;
 use mytheclipse_queue::in_memory::InMemoryQueue;
+use mytheclipse_queue::job::Job;
 use mytheclipse_queue::traits::Queue;
-use mytheclipse_queue::worker::{JobHandler, WorkerConfig, WorkerPool};
+use mytheclipse_queue::worker::{JobFuture, JobHandler, WorkerConfig, WorkerPool};
 
 /// Topic for background image-cache repair jobs.
 pub const TOPIC_CACHE_REPAIR: &str = "scrape:repair";
@@ -20,7 +22,7 @@ pub const TOPIC_CACHE_REPAIR: &str = "scrape:repair";
 pub struct JobQueue {
     queue: Arc<InMemoryQueue>,
     pool: Arc<WorkerPool<InMemoryQueue>>,
-    backpressure: Arc<mytheclipse_queue::backpressure_enqueue::BackpressureEnforcer>,
+    backpressure: Arc<BackpressureEnforcer>,
 }
 
 impl JobQueue {
@@ -39,11 +41,26 @@ impl JobQueue {
     }
 
     /// Starts `concurrency` workers for the given topic and handler.
+    ///
+    /// The handler is wrapped so that finishing a job returns its backpressure
+    /// slot: `BackpressureEnforcer` only *takes* slots, so the pairing has to
+    /// live here instead of in every handler.
     pub fn start_workers<H>(&self, topic: &str, handler: H)
     where
         H: JobHandler + 'static,
     {
-        self.pool.start(topic, handler);
+        let wrapped = SlotReleasingHandler {
+            inner: handler,
+            backpressure: Arc::clone(&self.backpressure),
+            topic: topic.to_string(),
+        };
+        self.pool.start(topic, wrapped);
+    }
+
+    /// Jobs currently holding a backpressure slot for `topic` (enqueued, not
+    /// yet finished).
+    pub fn inflight(&self, topic: &str) -> u64 {
+        self.backpressure.inflight(topic)
     }
 
     /// Enqueues a raw payload onto `topic`, rejecting under backpressure.
@@ -66,6 +83,26 @@ impl JobQueue {
     /// Underlying queue reference (for direct Queue trait calls).
     pub fn queue(&self) -> &Arc<InMemoryQueue> {
         &self.queue
+    }
+}
+
+/// Wraps a handler so the job's backpressure slot is returned when it finishes.
+struct SlotReleasingHandler<H> {
+    inner: H,
+    backpressure: Arc<BackpressureEnforcer>,
+    topic: String,
+}
+
+impl<H: JobHandler> JobHandler for SlotReleasingHandler<H> {
+    fn handle(&self, job: Job) -> JobFuture {
+        let finished = self.inner.handle(job);
+        let backpressure = Arc::clone(&self.backpressure);
+        let topic = self.topic.clone();
+        Box::pin(async move {
+            let result = finished.await;
+            backpressure.dec_finished(&topic);
+            result
+        })
     }
 }
 
@@ -101,14 +138,59 @@ pub fn global_job_queue() -> &'static JobQueue {
 /// Initialize the global queue with its repair-topic workers.
 pub fn init_global_job_queue() {
     let queue = global_job_queue();
-    queue.start_workers(
-        TOPIC_CACHE_REPAIR,
-        |job: mytheclipse_queue::job::Job| async move {
-            let url = String::from_utf8_lossy(&job.payload).to_string();
-            tracing::info!("[repair] processing cache job for {url}");
-            // Current repair action: log + no-op cache touch. Real repair logic
-            // (re-fetch + re-upload poster) is wired in a follow-up round.
-            Ok(())
-        },
-    );
+    queue.start_workers(TOPIC_CACHE_REPAIR, |job: Job| async move {
+        let url = String::from_utf8_lossy(&job.payload).to_string();
+        tracing::info!("[repair] processing cache job for {url}");
+        // Current repair action: log + no-op cache touch. Real repair logic
+        // (re-fetch + re-upload poster) is wired in a follow-up round.
+        Ok(())
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mytheclipse_queue::error::JobError;
+
+    #[tokio::test]
+    async fn finished_jobs_release_their_backpressure_slot() {
+        let queue = JobQueue::new(1);
+        queue.start_workers(TOPIC_CACHE_REPAIR, |_job: Job| async move {
+            Ok::<(), JobError>(())
+        });
+
+        queue
+            .enqueue(TOPIC_CACHE_REPAIR, b"x".to_vec())
+            .await
+            .expect("first enqueue fits the cap");
+        assert_eq!(queue.inflight(TOPIC_CACHE_REPAIR), 1);
+
+        for _ in 0..100 {
+            if queue.inflight(TOPIC_CACHE_REPAIR) == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(
+            queue.inflight(TOPIC_CACHE_REPAIR),
+            0,
+            "worker must return the slot once the job finishes"
+        );
+    }
+
+    #[tokio::test]
+    async fn enqueue_is_rejected_past_the_inflight_cap() {
+        // No workers started, so nothing ever releases a slot.
+        let queue = JobQueue::new(1);
+        for _ in 0..4 {
+            queue
+                .enqueue(TOPIC_CACHE_REPAIR, b"x".to_vec())
+                .await
+                .expect("within cap");
+        }
+        assert!(queue
+            .enqueue(TOPIC_CACHE_REPAIR, b"x".to_vec())
+            .await
+            .is_err());
+    }
 }

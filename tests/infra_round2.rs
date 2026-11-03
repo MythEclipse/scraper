@@ -2,8 +2,8 @@
 //! (thread/async/queue/scheduler infrastructure).
 //!
 //! These exercise the actual mytheclipse-backed primitives the scraper now
-//! uses: `compute` (gzip offload rayon pool), `spawn_io` (leader task),
-//! the InMemoryQueue path, and the cron schedule that drives the daily
+//! uses: `compute` (panic-isolated gzip decompression), `spawn_io` (leader
+//! task), the InMemoryQueue path, and the cron schedule that drives the daily
 //! cleanup.
 
 use std::time::Duration;
@@ -54,33 +54,43 @@ async fn scheduler_cron_expression_parses() {
 }
 
 #[tokio::test]
-async fn backpressure_enforcer_roundtrips_with_bounded_admission() {
-    use mytheclipse_queue::backpressure_enqueue::BackpressureEnforcer;
+async fn backpressure_enforcer_caps_inflight_until_jobs_finish() {
+    use mytheclipse_queue::backpressure_enqueue::{BackpressureEnforcer, BackpressureError};
     use mytheclipse_queue::in_memory::InMemoryQueue;
     use mytheclipse_queue::traits::Queue;
 
     let queue = InMemoryQueue::new();
     let enforcer = BackpressureEnforcer::new(4);
 
-    // Enqueues are admitted (permit released after each admission) and land
-    // in the underlying queue.
-    for i in 0..10u32 {
+    // mytheclipse-queue 5.x holds a slot per enqueue until the caller reports
+    // the job finished (`dec_finished`), which is what JobQueue's handler
+    // wrapper does. Fill the cap, then prove the next enqueue is rejected.
+    for i in 0..4u32 {
         enforcer
             .try_enqueue(&queue, "t", i.to_le_bytes().to_vec())
             .await
             .unwrap();
     }
+    assert!(matches!(
+        enforcer.try_enqueue(&queue, "t", b"x".to_vec()).await,
+        Err(BackpressureError::LimitReached { .. })
+    ));
 
-    // All 10 payloads are drained from the queue (mytheclipse's InMemoryQueue
-    // is LIFO, so order is reversed — assert the set, not the order).
+    // Draining the queue alone does not free capacity; finishing the jobs does.
     let mut got = Vec::new();
     while let Some(job) = queue.dequeue("t", Duration::from_millis(20)).await.unwrap() {
         got.push(u32::from_le_bytes(
             job.payload.as_slice().try_into().unwrap(),
         ));
+        enforcer.dec_finished("t");
     }
     got.sort_unstable();
-    assert_eq!(got, (0..10u32).collect::<Vec<_>>());
+    assert_eq!(got, (0..4u32).collect::<Vec<_>>());
+    assert_eq!(enforcer.inflight("t"), 0);
+    assert!(enforcer
+        .try_enqueue(&queue, "t", b"y".to_vec())
+        .await
+        .is_ok());
 
     // A zero-permit enforcer clamps to capacity 1 (never deadlocks) — a
     // single admission still succeeds.

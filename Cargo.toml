@@ -13,15 +13,16 @@ default-run = "scraper"
 # Dependensi yang dibutuhkan saat aplikasi berjalan
 [dependencies]
 # Mytheclipse workspace (user's custom library). All crates are published on
-# crates.io at 1.21.2 (incl. mytheclipse-queue + mytheclipse-tracing, the
-# redis-0.32 cache fix), so the scraper tracks the released crates via
-# version deps.
-mytheclipse = { version = "1.21", features = ["full"] }
-mytheclipse-cache = { version = "1.21", features = ["l2-redis", "cache-aside"] }
-mytheclipse-config = { version = "1.21" }
-mytheclipse-event = { version = "1.21" }
-mytheclipse-queue = { version = "1.21", features = ["in-memory"] }
-mytheclipse-tracing = { version = "1.21", features = ["env"] }
+# crates.io, so the scraper tracks the released crates via version deps:
+# core/cache/event/queue/tracing 5.1. Config loading is local (src/config) —
+# mytheclipse-config is deprecated upstream, so `toml` + serde_json do the
+# file/env merge instead.
+mytheclipse = { version = "5.1", features = ["full"] }
+mytheclipse-cache = { version = "5.1", features = ["l2-redis", "cache-aside"] }
+mytheclipse-event = { version = "5.1", features = ["typed"] }
+mytheclipse-queue = { version = "5.1", features = ["in-memory"] }
+mytheclipse-tracing = { version = "5.1", features = ["env"] }
+toml = "0.8"
 
 axum = { version = "0.8.8", features = ["ws", "multipart", "macros"] }
 tokio = { version = "1.49.0", features = ["full"] }

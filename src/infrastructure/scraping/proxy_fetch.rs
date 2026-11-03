@@ -201,8 +201,11 @@ async fn perform_fetch(slug: &str) -> Result<FetchResult, AppError> {
 
                 // Check if response is Gzip compressed (magic header 1f 8b)
                 let text_data = if bytes.len() > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
-                    // Gzip compressed, offload decompression to mytheclipse compute
-                    // (sized rayon pool, panic-isolated) instead of the blocking pool.
+                    // Gzip compressed: decompress through mytheclipse compute, which
+                    // catches panics so a malformed payload cannot take the request
+                    // task down. `compute` runs the closure on the calling thread
+                    // (mytheclipse >= 2.0 has no dedicated pool), so this stays a
+                    // bounded, panic-isolated call on the current worker.
                     // NOTE: leading `::` forces the external crate (shadowed by the
                     // local infrastructure::cache::mytheclipse bridge module).
                     let decompressed = ::mytheclipse::compute(move || {

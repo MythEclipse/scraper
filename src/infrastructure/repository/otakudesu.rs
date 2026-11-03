@@ -13,8 +13,7 @@ use crate::infrastructure::repository::parsers::otakudesu_parser;
 use crate::infrastructure::scraping::html_fetcher::fetch_html_with_retry;
 use crate::infrastructure::scraping::proxy_fetch::fetch_with_proxy;
 use crate::infrastructure::scraping::retry::{default_backoff, retry, retry_all};
-
-const OTAKUDESU_BASE_URL: &str = "https://otakudesu.cloud";
+use crate::infrastructure::scraping::scraping_urls::get_otakudesu_url;
 
 pub struct OtakudesuRepository;
 
@@ -23,8 +22,10 @@ impl OtakudesuRepository {
         Self
     }
 
+    /// Base URL for every Otakudesu request: `OTAKUDESU_BASE_URL` env override,
+    /// else [`scraping_urls::OTAKUDESU_BASE_URL`]. No trailing slash.
     fn base_url(&self) -> String {
-        "https://otakudesu.cloud".to_string()
+        get_otakudesu_url()
     }
 
     pub fn index_urls(&self) -> (String, String) {
@@ -40,11 +41,11 @@ impl OtakudesuRepository {
     }
 
     pub fn detail_url(&self, slug: &str) -> String {
-        format!("{}/anime/{}", OTAKUDESU_BASE_URL, slug)
+        format!("{}/anime/{}", self.base_url(), slug)
     }
 
     pub fn page_url(&self, category: &str, page: &str) -> String {
-        format!("{}/{}/page/{}/", OTAKUDESU_BASE_URL, category, page)
+        format!("{}/{}/page/{}/", self.base_url(), category, page)
     }
 
     pub fn search_url(&self, query: &str, page: &str) -> String {
@@ -63,7 +64,7 @@ impl OtakudesuRepository {
     }
 
     pub fn full_episode_url(&self, slug: &str) -> String {
-        format!("{}/episode/{}", OTAKUDESU_BASE_URL, slug)
+        format!("{}/episode/{}", self.base_url(), slug)
     }
 }
 

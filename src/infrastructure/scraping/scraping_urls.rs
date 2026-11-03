@@ -7,7 +7,10 @@ use crate::config::CONFIG;
 use std::env;
 
 pub const BASE_URL: &str = "http://127.0.0.1:4090";
-pub const OTAKUDESU_BASE_URL: &str = "https://otakudesu.blog/";
+
+/// Canonical Otakudesu base URL, stored without a trailing slash because every
+/// call site appends its own path (`{base}/anime/{slug}`).
+pub const OTAKUDESU_BASE_URL: &str = "https://otakudesu.blog";
 
 /// Get Komik URL from environment config.
 pub fn get_komik_url() -> String {
@@ -32,6 +35,39 @@ pub fn get_komik_api_url() -> String {
 }
 
 /// Get Otakudesu URL from environment config.
+///
+/// Normalized without a trailing slash so `format!("{base}/path")` never emits
+/// a double slash (which the site 301s away from, costing an extra round trip
+/// on every scrape).
 pub fn get_otakudesu_url() -> String {
-    env::var("OTAKUDESU_BASE_URL").unwrap_or_else(|_| OTAKUDESU_BASE_URL.to_string())
+    let base = env::var("OTAKUDESU_BASE_URL").unwrap_or_else(|_| OTAKUDESU_BASE_URL.to_string());
+    normalize_base_url(&base)
+}
+
+/// Drops trailing slashes so callers can always append `/{path}`.
+fn normalize_base_url(base: &str) -> String {
+    base.trim_end_matches('/').to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn otakudesu_default_is_the_blog_domain() {
+        assert_eq!(OTAKUDESU_BASE_URL, "https://otakudesu.blog");
+    }
+
+    #[test]
+    fn base_url_normalization_strips_trailing_slashes() {
+        assert_eq!(
+            normalize_base_url("https://otakudesu.blog/"),
+            OTAKUDESU_BASE_URL
+        );
+        assert_eq!(
+            normalize_base_url("https://otakudesu.blog//"),
+            OTAKUDESU_BASE_URL
+        );
+        assert_eq!(normalize_base_url(OTAKUDESU_BASE_URL), OTAKUDESU_BASE_URL);
+    }
 }

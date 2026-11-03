@@ -5,10 +5,28 @@
 //! - Fails fast at startup if required variables are missing
 //! - Supports hierarchical configuration (default -> environment-specific)
 
-use mytheclipse_config::ConfigError;
 use serde::Deserialize;
+use serde_json::{Map, Value};
 use std::env;
+use std::path::Path;
 use std::sync::LazyLock;
+
+/// Configuration load failure.
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("cannot read {path}: {source}")]
+    Read {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("cannot parse {path}: {source}")]
+    Parse {
+        path: String,
+        source: toml::de::Error,
+    },
+    #[error("invalid configuration: {0}")]
+    Invalid(String),
+}
 
 /// Application configuration loaded at startup.
 /// All fields are required unless marked as `Option<T>`.
@@ -212,16 +230,113 @@ fn default_db_max_lifetime() -> u64 {
     1800
 }
 
+/// Deep-merge an optional TOML config file into `into`.
+///
+/// A missing file is not an error: most deploys are env-only.
+fn merge_file(into: &mut Map<String, Value>, path: &Path) -> Result<(), ConfigError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let raw = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let parsed: toml::Value = toml::from_str(&raw).map_err(|source| ConfigError::Parse {
+        path: path.display().to_string(),
+        source,
+    })?;
+    let value = serde_json::to_value(parsed).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+    merge_value(into, value);
+    Ok(())
+}
+
+/// Merge `value` into `into` at leaf level: nested objects merge recursively,
+/// every other value replaces the previous one.
+fn merge_value(into: &mut Map<String, Value>, value: Value) {
+    let Value::Object(map) = value else {
+        return;
+    };
+    for (key, incoming) in map {
+        let both_objects = matches!(incoming, Value::Object(_))
+            && matches!(into.get(&key), Some(Value::Object(_)));
+        if both_objects {
+            if let (Some(Value::Object(existing)), Value::Object(inner)) =
+                (into.get_mut(&key), incoming)
+            {
+                merge_value(existing, Value::Object(inner));
+            }
+        } else {
+            into.insert(key, incoming);
+        }
+    }
+}
+
+/// Merge every `{prefix}_*` env var into `into`, lowercased, with `__` opening
+/// a nested level (`APP_DB__MAX_CONNECTIONS` → `db.max_connections`).
+fn merge_env(into: &mut Map<String, Value>, prefix: &str) {
+    let prefix = format!("{prefix}_");
+    for (key, raw) in env::vars() {
+        let Some(rest) = key.strip_prefix(&prefix) else {
+            continue;
+        };
+        let path: Vec<String> = rest.split("__").map(str::to_ascii_lowercase).collect();
+        set_path(into, &path, env_scalar(raw));
+    }
+}
+
+/// Merge the legacy flat env vars, which win over `APP_*` and file values.
+fn merge_legacy_env(into: &mut Map<String, Value>) {
+    const LEGACY: [(&str, &str); 3] = [
+        ("DATABASE_URL", "database_url"),
+        ("JWT_SECRET", "jwt_secret"),
+        ("REDIS_URL", "redis_url"),
+    ];
+    for (env_key, field) in LEGACY {
+        if let Ok(raw) = env::var(env_key) {
+            into.insert(field.to_string(), env_scalar(raw));
+        }
+    }
+}
+
+/// Read an env value as the JSON scalar it looks like, so `APP_SERVER_PORT=4091`
+/// reaches `u16` fields. Anything that is not a number or bool stays a string
+/// (`a.com,b.com` must not be parsed).
+fn env_scalar(raw: String) -> Value {
+    match serde_json::from_str::<Value>(&raw) {
+        Ok(v @ (Value::Number(_) | Value::Bool(_))) => v,
+        _ => Value::String(raw),
+    }
+}
+
+/// Insert `value` at `path`, creating intermediate objects.
+fn set_path(into: &mut Map<String, Value>, path: &[String], value: Value) {
+    let Some((head, rest)) = path.split_first() else {
+        return;
+    };
+    if rest.is_empty() {
+        into.insert(head.clone(), value);
+        return;
+    }
+    let entry = into
+        .entry(head.clone())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !entry.is_object() {
+        *entry = Value::Object(Map::new());
+    }
+    if let Value::Object(child) = entry {
+        set_path(child, rest, value);
+    }
+}
+
 impl AppConfig {
     /// Load configuration from environment and optional config files.
     ///
     /// Priority (highest to lowest):
-    /// 1. Environment variables (prefixed with APP_)
-    /// 2. `config/{environment}.toml`
-    /// 3. `config/default.toml`
+    /// 1. Legacy flat env vars (`DATABASE_URL`, `JWT_SECRET`, `REDIS_URL`)
+    /// 2. Environment variables prefixed with `APP_` (`__` nests: `APP_DB__MAX_CONNECTIONS`)
+    /// 3. `config/{run_mode}.toml`
+    /// 4. `config/default.toml`
     pub fn load() -> Result<Self, ConfigError> {
-        use mytheclipse_config::ConfigLoader;
-
         // Load .env file first
         if let Err(e) = dotenvy::dotenv() {
             tracing::debug!("Could not load .env file: {}", e);
@@ -230,39 +345,15 @@ impl AppConfig {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
 
         // Start with default config file (optional — many deploys are env-only)
-        let mut loader = ConfigLoader::<AppConfig>::new()
-            .load_dotenv(std::path::Path::new(".env"))
-            .unwrap_or_else(|_| ConfigLoader::<AppConfig>::new());
-
-        let default_path = std::path::Path::new("config/default.toml");
-        if default_path.exists() {
-            loader = loader.merge_file(default_path)?;
-        }
+        let mut merged = Map::new();
+        merge_file(&mut merged, Path::new("config/default.toml"))?;
         // Layer on environment-specific values (optional)
-        let env_path_str = format!("config/{}.toml", run_mode);
-        let env_path = std::path::Path::new(&env_path_str);
-        if env_path.exists() {
-            loader = loader.merge_file(env_path)?;
-        }
+        merge_file(&mut merged, Path::new(&format!("config/{run_mode}.toml")))?;
+        merge_env(&mut merged, "APP");
+        merge_legacy_env(&mut merged);
 
-        // Add environment variables (with APP_ prefix)
-        loader = loader.merge_env("APP");
-
-        // Map legacy env vars to new config structure.
-        // ConfigLoader merges at leaf level; legacy vars override the merged
-        // value directly (highest priority after APP_*).
-        let mut value = loader.peek().clone();
-        if let Ok(v) = env::var("DATABASE_URL") {
-            value["database_url"] = serde_json::Value::String(v);
-        }
-        if let Ok(v) = env::var("JWT_SECRET") {
-            value["jwt_secret"] = serde_json::Value::String(v);
-        }
-        if let Ok(v) = env::var("REDIS_URL") {
-            value["redis_url"] = serde_json::Value::String(v);
-        }
-
-        ConfigLoader::<AppConfig>::new().merge_value(value).build()
+        serde_json::from_value(Value::Object(merged))
+            .map_err(|e| ConfigError::Invalid(e.to_string()))
     }
 
     /// Check if running in production mode
@@ -295,3 +386,62 @@ pub static MINIO_CONFIG: LazyLock<Option<MinioConfig>> = LazyLock::new(|| {
     let _ = dotenvy::dotenv();
     MinioConfig::from_env()
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn env_scalar_only_coerces_numbers_and_bools() {
+        assert_eq!(env_scalar("4091".into()), Value::from(4091));
+        assert_eq!(env_scalar("true".into()), Value::Bool(true));
+        assert_eq!(
+            env_scalar("a.com,b.com".into()),
+            Value::String("a.com,b.com".into())
+        );
+        assert_eq!(
+            env_scalar("https://x".into()),
+            Value::String("https://x".into())
+        );
+    }
+
+    #[test]
+    fn set_path_nests_under_one_object() {
+        let mut map = Map::new();
+        set_path(
+            &mut map,
+            &["db".into(), "max_connections".into()],
+            Value::from(50),
+        );
+        set_path(
+            &mut map,
+            &["db".into(), "min_connections".into()],
+            Value::from(2),
+        );
+        assert_eq!(map["db"]["max_connections"], Value::from(50));
+        assert_eq!(map["db"]["min_connections"], Value::from(2));
+    }
+
+    #[test]
+    fn merge_value_is_leaf_level() {
+        let mut merged = Map::new();
+        merge_value(
+            &mut merged,
+            serde_json::json!({"db": {"max_connections": 50}, "log_level": "warn"}),
+        );
+        merge_value(
+            &mut merged,
+            serde_json::json!({"db": {"min_connections": 2}}),
+        );
+        assert_eq!(merged["db"]["max_connections"], Value::from(50));
+        assert_eq!(merged["db"]["min_connections"], Value::from(2));
+        assert_eq!(merged["log_level"], Value::String("warn".into()));
+    }
+
+    #[test]
+    fn missing_config_file_is_not_an_error() {
+        let mut map = Map::new();
+        assert!(merge_file(&mut map, Path::new("config/does-not-exist.toml")).is_ok());
+        assert!(map.is_empty());
+    }
+}
