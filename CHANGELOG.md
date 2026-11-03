@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/MythEclipse/scraper/compare/v1.0.6...v1.1.0) (2026-11-03)
+
+
+### Features
+
+* **bootstrap:** drain in-flight requests on SIGTERM ([5ba3e31](https://github.com/MythEclipse/scraper/commit/5ba3e31b9ff98e5a7c2134f4c794a0683a348e01))
+
 ## [1.0.6](https://github.com/MythEclipse/scraper/compare/v1.0.5...v1.0.6) (2026-11-03)
 
 ## [1.0.5](https://github.com/MythEclipse/scraper/compare/v1.0.4...v1.0.5) (2026-11-03)
