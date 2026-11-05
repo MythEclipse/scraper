@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/MythEclipse/scraper/compare/v1.1.0...v1.1.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** stop the auto-merge gate reading its own check run ([059645d](https://github.com/MythEclipse/scraper/commit/059645d40aa0070335c1e14a521554d719b3af72))
+
 # [1.1.0](https://github.com/MythEclipse/scraper/compare/v1.0.6...v1.1.0) (2026-11-03)
 
 
