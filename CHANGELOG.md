@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/MythEclipse/scraper/compare/v1.1.2...v1.1.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** align the opentelemetry crates on 0.33 ([52bd7c0](https://github.com/MythEclipse/scraper/commit/52bd7c05816d3d24e330d9226db3c55a192f3c79))
+
 ## [1.1.2](https://github.com/MythEclipse/scraper/compare/v1.1.1...v1.1.2) (2026-11-05)
 
 ## [1.1.1](https://github.com/MythEclipse/scraper/compare/v1.1.0...v1.1.1) (2026-11-05)
