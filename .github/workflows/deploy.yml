@@ -75,7 +75,7 @@ jobs:
           cp "$BIN" payload/scraper
           # Read at runtime by the Playwright fallback, so it must travel too.
           cp scrape_media.py payload/scrape_media.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: scraper-release
           path: payload/
@@ -114,7 +114,7 @@ jobs:
         run: scp -o BatchMode=yes scripts/deploy-direct.sh "$VPS_USER@$VPS_HOST:/tmp/scraper-deploy-direct.sh"
 
       - name: Download the CI-built binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: scraper-release
           path: payload
