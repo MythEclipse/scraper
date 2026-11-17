@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/MythEclipse/scraper/compare/v1.1.4...v1.1.5) (2026-11-17)
+
+
+### Performance Improvements
+
+* cut per-request allocations, round trips and tail latency ([5402b7e](https://github.com/MythEclipse/scraper/commit/5402b7e539d122f0f9abfff742e55f68f9b462c6))
+
 ## [1.1.4](https://github.com/MythEclipse/scraper/compare/v1.1.3...v1.1.4) (2026-11-17)
 
 ## [1.1.3](https://github.com/MythEclipse/scraper/compare/v1.1.2...v1.1.3) (2026-11-05)
