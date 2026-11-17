@@ -30,7 +30,10 @@
 # ubuntu:26.04 (NOT rust:slim) so the compiler and the runtime share a libc.
 FROM ubuntu:26.04 AS build
 
-ARG RUST_VERSION=1.90.0
+# Must stay >= the MSRV of the dependency set: sea-orm 2 / sqlx 0.9 require
+# 1.94, and `cargo build --locked` refuses to start on an older rustc. Pinned
+# (not `stable`) so an image rebuild cannot silently change the compiler.
+ARG RUST_VERSION=1.99.1
 
 ENV DEBIAN_FRONTEND=noninteractive
 
