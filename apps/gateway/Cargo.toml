@@ -12,6 +12,9 @@ default-run = "scraper"
 scraper-service = { path = "../scraper-service" }
 tokio = { version = "1.49.0", features = ["full"] }
 anyhow = "1.0"
+# Global allocator for the binary (see src/main.rs). `default-features = false`
+# skips the C-symbol override — only Rust's #[global_allocator] is wanted.
+mimalloc = { version = "0.1", default-features = false }
 
 [[bin]]
 name = "scraper"

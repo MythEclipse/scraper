@@ -23,6 +23,16 @@ use std::time::Instant;
 
 static METER: OnceLock<Meter> = OnceLock::new();
 static PROVIDER: OnceLock<opentelemetry_sdk::metrics::SdkMeterProvider> = OnceLock::new();
+/// Whether metrics recording is live, set by [`init_otel_metrics`].
+///
+/// When no OTLP endpoint is configured the middleware becomes a pass-through:
+/// the instruments have no reader, so every per-request `String` and
+/// `KeyValue` it used to build was pure overhead.
+static METRICS_ENABLED: OnceLock<bool> = OnceLock::new();
+
+fn metrics_enabled() -> bool {
+    *METRICS_ENABLED.get().unwrap_or(&false)
+}
 
 fn meter() -> &'static Meter {
     METER
@@ -39,6 +49,7 @@ pub fn init_otel_metrics() {
 
     let otel_endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT");
     let service_name = std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "scraper-api".into());
+    let _ = METRICS_ENABLED.set(otel_endpoint.is_ok());
 
     let m = if let Ok(endpoint) = otel_endpoint {
         let export_interval_ms: u64 = std::env::var("OTEL_METRICS_EXPORT_INTERVAL")
@@ -103,39 +114,36 @@ pub async fn shutdown_otel_metrics() {
 ///   - `http.server.request_duration_ms` — Histogram { method, path, status }
 ///   - `http.server.request_in_flight`   — UpDownCounter { method, path }
 pub async fn otel_metrics_middleware(req: Request, next: Next) -> Response {
-    let method = req.method().to_string();
-    let path = req.uri().path().to_string();
+    // Metrics off (no OTLP endpoint): pass straight through. Nothing observes
+    // the instruments in that case, so the allocations below bought nothing.
+    if !metrics_enabled() {
+        return next.run(req).await;
+    }
+
+    let method = req.method().as_str().to_owned();
+    let path = req.uri().path().to_owned();
+    // One attribute set, used for the increment AND the decrement: an
+    // UpDownCounter is keyed by its attributes, so `add(1, {method,path})`
+    // followed by `add(-1, [])` left the real series permanently positive and
+    // created a bogus attribute-less one.
+    let route_attrs = [KeyValue::new("method", method), KeyValue::new("path", path)];
 
     let in_flight = get_in_flight_counter();
-    let counter = get_request_counter();
-    let duration = get_duration_histogram();
-
-    // Record in-flight
-    in_flight.add(
-        1,
-        &[
-            KeyValue::new("method", method.clone()),
-            KeyValue::new("path", path.clone()),
-        ],
-    );
+    in_flight.add(1, &route_attrs);
 
     let start = Instant::now();
     let response = next.run(req).await;
-    let elapsed_ms = start.elapsed().as_millis() as f64;
+    let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+    in_flight.add(-1, &route_attrs);
 
-    let status = response.status().as_u16().to_string();
-
-    // Record request count + duration
+    // `status` as an integer: no String is allocated just to name a code.
     let attrs = [
-        KeyValue::new("method", method),
-        KeyValue::new("path", path),
-        KeyValue::new("status", status),
+        route_attrs[0].clone(),
+        route_attrs[1].clone(),
+        KeyValue::new("status", i64::from(response.status().as_u16())),
     ];
-    counter.add(1, &attrs);
-    duration.record(elapsed_ms, &attrs);
-
-    // Decrement in-flight
-    in_flight.add(-1, &[]);
+    get_request_counter().add(1, &attrs);
+    get_duration_histogram().record(elapsed_ms, &attrs);
 
     response
 }

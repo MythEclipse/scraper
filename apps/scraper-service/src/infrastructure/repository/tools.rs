@@ -11,9 +11,17 @@ use regex::Regex;
 use reqwest::header::USER_AGENT;
 use scraper::{Html, Selector};
 use serde_json::{Value, json};
+use std::sync::LazyLock;
 use urlencoding::encode as urlencode;
 
 const CHROME_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+
+/// Hostname shape accepted by `fetch_check_hosting`. Compiled once instead of
+/// per request.
+static DOMAIN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$")
+        .expect("literal hostname regex")
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,8 +193,7 @@ pub async fn fetch_check_hosting(domain: &str) -> Result<Value, String> {
         .trim_start_matches("https://")
         .trim_start_matches("www.")
         .to_string();
-    let domain_re =
-        Regex::new(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$").unwrap();
+    let domain_re = &*DOMAIN_RE;
     if !domain_re.is_match(&cd) {
         return Err("Invalid domain format".into());
     }
@@ -259,21 +266,21 @@ pub async fn fetch_hargapangan() -> Result<Value, String> {
 // ---------------------------------------------------------------------------
 
 fn aes_encrypt_resi(resi: &str) -> String {
-    use aes::cipher::generic_array::GenericArray;
-    use aes::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::Pkcs7};
     type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
     let key_hex = "79540e250fdb16afac03e19c46dbdeb3";
     let iv_hex = "eb2bb9425e81ffa942522e4414e95bd0";
     let key_bytes = hex::decode(key_hex).expect("bad key hex");
     let iv_bytes = hex::decode(iv_hex).expect("bad iv hex");
-    let key = GenericArray::from_slice(&key_bytes);
-    let iv = GenericArray::from_slice(&iv_bytes);
+    // `new_from_slices` replaces the `GenericArray::from_slice` dance: cipher
+    // 0.5 uses `Array` (hybrid-array) and no longer re-exports generic-array.
+    let cipher = Aes128CbcEnc::new_from_slices(&key_bytes, &iv_bytes).expect("valid key/iv length");
 
     let data = resi.as_bytes();
     let mut buf = vec![0u8; data.len() + 16];
     buf[..data.len()].copy_from_slice(data);
-    let ct = Aes128CbcEnc::new(key, iv)
-        .encrypt_padded_mut::<Pkcs7>(&mut buf, data.len())
+    let ct = cipher
+        .encrypt_padded::<Pkcs7>(&mut buf, data.len())
         .expect("encrypt");
     base64::Engine::encode(&base64::engine::general_purpose::STANDARD, ct)
 }

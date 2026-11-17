@@ -11,26 +11,19 @@ use reqwest::header::USER_AGENT;
 use crate::domain::entity::downloader::{DownloadResult, MediaItem, MediaType};
 use crate::domain::error::ScrapingError;
 
+use super::patterns::YOUTUBE_VIDEO_ID;
 use super::shared::{format_filesize, run_ytdlp_json};
 use std::path::Path;
 
 /// Helper: extract a YouTube video ID from a URL.
+///
+/// One pre-compiled pattern covers all five URL shapes; the previous version
+/// compiled five `Regex`es per call, which is pure CPU on a per-request path.
 fn extract_youtube_id(url: &str) -> Option<String> {
-    let patterns = [
-        r"youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})",
-        r"youtu\.be/([a-zA-Z0-9_-]{11})",
-        r"youtube\.com/shorts/([a-zA-Z0-9_-]{11})",
-        r"youtube\.com/embed/([a-zA-Z0-9_-]{11})",
-        r"youtube\.com/v/([a-zA-Z0-9_-]{11})",
-    ];
-    for pat in &patterns {
-        if let Some(caps) = regex::Regex::new(pat).ok().and_then(|r| r.captures(url)) {
-            if let Some(m) = caps.get(1) {
-                return Some(m.as_str().to_string());
-            }
-        }
-    }
-    None
+    YOUTUBE_VIDEO_ID
+        .captures(url)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_string())
 }
 
 /// YouTube audio via savetube.media — returns metadata + direct download link.

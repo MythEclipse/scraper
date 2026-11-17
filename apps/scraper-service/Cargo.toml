@@ -35,7 +35,21 @@ uuid = { version = "1.10.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 futures = "0.3"
-reqwest = { version = "0.13.5", features = ["json", "stream", "multipart"] }
+# gzip/brotli/deflate: let reqwest negotiate and decode `Content-Encoding`
+# transparently. Without them every upstream page travels uncompressed (the
+# scraper sent no Accept-Encoding), and the one gzip path it did handle had to
+# decompress by hand into a second buffer. `form`/`query` are separate features
+# in reqwest 0.13 — without `form` the request builders have no `.form()`.
+reqwest = { version = "0.13.5", features = [
+    "json",
+    "stream",
+    "multipart",
+    "form",
+    "query",
+    "gzip",
+    "brotli",
+    "deflate",
+] }
 http = "1.4.0"
 regex = "1.12.2"
 
@@ -51,7 +65,12 @@ fastrand = "2.0"
 
 tower-http = { version = "0.7.1", features = ["fs", "cors", "compression-gzip", "compression-br", "compression-zstd"] }
 dashmap = "6.1"
-deadpool-redis = { version = "0.23.1", features = ["serde"] }
+# Pinned to 0.22: deadpool-redis 0.23 moved to the redis 1.x client, while
+# mytheclipse-cache 5.1 (whose RedisCache this pool feeds) is built against
+# redis 0.32. Two redis versions in one graph means the `MultiplexedConnection`
+# taken from the pool is a different type from the one RedisCache accepts, so
+# the bridge stops compiling. Keep both on redis 0.32.
+deadpool-redis = { version = "0.22.1", features = ["serde"] }
 rayon = "1.12"
 scraper = "0.29.0"
 flate2 = "1.1"

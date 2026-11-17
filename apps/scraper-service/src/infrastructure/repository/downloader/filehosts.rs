@@ -14,11 +14,10 @@ use crate::infrastructure::utils::http_client::http_client;
 
 use super::patterns::{
     H1, KRAKENFILES_ID, MEDIAFIRE_CDN, MEDIAFIRE_DOWNLOAD_LINK, MEDIAFIRE_ID_PARAM,
-    MEDIAFIRE_VIEWER_DATA, MEGA_FILE_ID, PIXELDRAIN_ID, TERABOX_HOST,
+    MEDIAFIRE_VIEWER_DATA, MEGA_FILE_ID, PIXELDRAIN_ID, TERABOX_HOST, TERABOX_SURL,
 };
 use super::shared::format_filesize;
-use aes::cipher::BlockDecrypt;
-use aes::cipher::KeyInit;
+use aes::cipher::BlockCipherDecrypt;
 use base64::Engine;
 
 /// MEGA.nz — requires AES-128-CBC decryption of the file attributes.
@@ -185,34 +184,31 @@ fn fix_base64_key(s: &str) -> String {
 
 fn decrypt_aes_128_cbc(key: &[u8], _iv: &[u8], enc: &str) -> Option<String> {
     use aes::Aes128;
+    use aes::cipher::{Array, KeyInit};
     use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64;
 
     let data = BASE64.decode(enc).ok()?;
     let cipher = Aes128::new_from_slice(key).ok()?;
 
-    let mut result = Vec::new();
+    // MEGA stores the attribute blob as raw AES-128 blocks, so each 16-byte
+    // chunk is decrypted in place. The old loop wrapped every single block in
+    // `catch_unwind` (two heap-free but still non-trivial guard setups per
+    // block) to guard a call that cannot panic for a fixed-size block; the
+    // result was copied through a scratch array as well.
+    let mut result = Vec::with_capacity(data.len());
     for chunk in data.as_chunks::<16>().0 {
-        let mut block = [0u8; 16];
-        block.copy_from_slice(chunk);
-        if let Ok(_) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            cipher.decrypt_block((&mut block).into())
-        })) {
-            result.extend_from_slice(&block);
-        } else {
-            return None;
-        }
+        let mut block = Array::from(*chunk);
+        cipher.decrypt_block(&mut block);
+        result.extend_from_slice(block.as_slice());
     }
 
-    let s = String::from_utf8_lossy(&result).into_owned();
-    let s = s.trim_start_matches("MEGA");
-    Some(s.to_string())
+    // One allocation: trim the "MEGA" prefix straight into the owned String.
+    let decoded = String::from_utf8_lossy(&result);
+    Some(decoded.trim_start_matches("MEGA").to_string())
 }
 
 pub async fn fetch_terabox(url: &str) -> Result<DownloadResult, ScrapingError> {
-    let pattern = regex::Regex::new(
-        r"^https?://(?:www\.|1024)?terabox(?:app)?\.com/.*[?&]?surl=([a-zA-Z0-9_-]+)",
-    )
-    .unwrap();
+    let pattern = &*TERABOX_SURL;
 
     let mut surl = pattern
         .captures(url)

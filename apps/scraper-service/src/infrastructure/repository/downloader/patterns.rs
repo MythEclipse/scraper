@@ -62,6 +62,7 @@ patterns! {
     // ── File hosts ────────────────────────────────────────────────────────
     MEGA_FILE_ID: Regex = r"file/([^#]+)";
     TERABOX_HOST: Regex = r"^https?://(?:www\.|1024)?terabox(?:app)?\.com";
+    TERABOX_SURL: Regex = r"^https?://(?:www\.|1024)?terabox(?:app)?\.com/.*[?&]?surl=([a-zA-Z0-9_-]+)";
     PIXELDRAIN_ID: Regex = r"/[de]/([a-zA-Z0-9]+)";
     KRAKENFILES_ID: Regex = r"krakenfiles\.com/v/([A-Za-z0-9_-]+)";
     MEDIAFIRE_CDN: Regex = r"\$\.get\('([^']+)',";
@@ -72,6 +73,19 @@ patterns! {
 
     // ── Misc ──────────────────────────────────────────────────────────────
     DANBOORU_POST_ID: Regex = r"danbooru\.donmai\.us/posts/(\d+)$";
+    SPOTIFY_URL: Regex = r"https?://open\.spotify\.com/(?:intl-[a-zA-Z0-9-]+/)?(track|album|playlist)/([a-zA-Z0-9]+)";
+
+    // ── YouTube ───────────────────────────────────────────────────────────
+    // The five URL shapes in one pattern: a single scan replaces five
+    // compile-and-scan rounds per call.
+    YOUTUBE_VIDEO_ID: Regex = r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/embed/|youtube\.com/v/)([a-zA-Z0-9_-]{11})";
+
+    // ── TikTok embed page ─────────────────────────────────────────────────
+    // Kept as three patterns: they differ in attribute ORDER, so each needs its
+    // own capture position.
+    TIKTOK_EMBED_VIDEO_TESTID_FIRST: Regex = r#"<video[^>]*data-testid="play-video"[^>]*src="([^"]+)""#;
+    TIKTOK_EMBED_VIDEO_SRC_FIRST: Regex = r#"<video[^>]*src="([^"]+)"[^>]*data-testid="play-video""#;
+    TIKTOK_EMBED_VIDEO_ANY: Regex = r#"<video[^>]*src="([^"]+)""#;
 
     // ── Shared / detection ────────────────────────────────────────────────
     THUMB_PATH: Regex = r"/thumb(\?|$)";

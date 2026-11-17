@@ -11,6 +11,13 @@ use regex::Regex;
 use reqwest::header::USER_AGENT;
 use scraper::{Html, Selector};
 use serde_json::{Value, json};
+use std::sync::LazyLock;
+
+/// The "1 USD = 15,885.00 IDR" rate line on wise.com. Compiled once: this ran
+/// on every currency-converter request.
+static WISE_RATE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"1 [A-Z]{3} = ([0-9,.]+) [A-Z]{3}").expect("literal wise.com rate regex")
+});
 
 /// Currency converter: scrape wise.com exchange rate page.
 /// `amount`: amount to convert, `from`/`to`: currency codes (e.g. USD→IDR).
@@ -43,8 +50,7 @@ pub async fn fetch_currency_converter(amount: f64, from: &str, to: &str) -> Resu
         .map_err(|e| format!("Failed to read body: {}", e))?;
 
     // Try regex first: "1 USD = 15,885.00 IDR"
-    let re = Regex::new(r"1 [A-Z]{3} = ([0-9,.]+) [A-Z]{3}")
-        .map_err(|e| format!("Regex compile: {}", e))?;
+    let re = &*WISE_RATE;
 
     if let Some(caps) = re.captures(&body) {
         let rate_str = caps.get(1).map(|m| m.as_str()).unwrap_or("0");

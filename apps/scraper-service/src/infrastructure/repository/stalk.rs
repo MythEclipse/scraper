@@ -9,6 +9,13 @@ use crate::infrastructure::utils::http_client::http_client;
 use regex::Regex;
 use reqwest::header::USER_AGENT;
 use serde_json::{Value, json};
+use std::sync::LazyLock;
+
+/// Video id embedded in a YouTube thumbnail URL (`i.ytimg.com/vi/<id>/...`).
+/// Compiled once — this used to recompile per video in a search result list.
+static YT_THUMB_VIDEO_ID: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"vi/([A-Za-z0-9_-]{11})/").expect("literal youtube thumbnail regex")
+});
 
 /// GitHub user stalk via public API.
 pub async fn fetch_github_stalk(username: &str) -> Result<Value, String> {
@@ -325,9 +332,8 @@ fn video_from_lockup(lv: &Value) -> Value {
         .pointer("/contentImage/thumbnailViewModel/image/sources/0/url")
         .and_then(|u| u.as_str())
         .unwrap_or("");
-    let video_id = Regex::new(r"vi/([A-Za-z0-9_-]{11})/")
-        .ok()
-        .and_then(|re| re.captures(thumb))
+    let video_id = YT_THUMB_VIDEO_ID
+        .captures(thumb)
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
         .unwrap_or_default();

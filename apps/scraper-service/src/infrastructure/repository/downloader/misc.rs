@@ -14,6 +14,7 @@ use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
 use super::patterns::DANBOORU_POST_ID;
+use super::patterns::SPOTIFY_URL;
 use super::shared::run_ytdlp_json;
 use super::social::fetch_snapsave;
 
@@ -141,10 +142,7 @@ pub async fn fetch_all_in_one(url: &str) -> Result<DownloadResult, ScrapingError
 
 pub async fn fetch_spotify(url: &str) -> Result<DownloadResult, ScrapingError> {
     // Validate Spotify URL
-    let re = regex::Regex::new(
-        r"https?://open\.spotify\.com/(?:intl-[a-zA-Z0-9-]+/)?(track|album|playlist)/([a-zA-Z0-9]+)",
-    )
-    .unwrap();
+    let re = &*SPOTIFY_URL;
     let captures = re
         .captures(url)
         .ok_or_else(|| ScrapingError::Http("Invalid Spotify URL".to_string()))?;

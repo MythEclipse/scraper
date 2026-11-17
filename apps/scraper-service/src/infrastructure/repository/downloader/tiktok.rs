@@ -9,8 +9,9 @@ use crate::domain::error::ScrapingError;
 use crate::infrastructure::utils::http_client::http_client;
 
 use super::patterns::{
-    TIKTOK_AUTHOR, TIKTOK_GENERIC_VIDEO_ID, TIKTOK_HAS_VIDEO_PATH, TIKTOK_SHORT_PATH, TIKTOK_TITLE,
-    TIKTOK_VIDEO_ID,
+    TIKTOK_AUTHOR, TIKTOK_EMBED_VIDEO_ANY, TIKTOK_EMBED_VIDEO_SRC_FIRST,
+    TIKTOK_EMBED_VIDEO_TESTID_FIRST, TIKTOK_GENERIC_VIDEO_ID, TIKTOK_HAS_VIDEO_PATH,
+    TIKTOK_SHORT_PATH, TIKTOK_TITLE, TIKTOK_VIDEO_ID,
 };
 use super::shared::{format_filesize, run_playwright_scraper, run_ytdlp_json};
 
@@ -90,11 +91,11 @@ async fn fetch_tiktok_embed(url: &str) -> Result<DownloadResult, ScrapingError> 
     let mp4_url = {
         let mut found: Option<String> = None;
         for pat in [
-            r#"<video[^>]*data-testid="play-video"[^>]*src="([^"]+)""#,
-            r#"<video[^>]*src="([^"]+)"[^>]*data-testid="play-video""#,
-            r#"<video[^>]*src="([^"]+)""#,
+            &*TIKTOK_EMBED_VIDEO_TESTID_FIRST,
+            &*TIKTOK_EMBED_VIDEO_SRC_FIRST,
+            &*TIKTOK_EMBED_VIDEO_ANY,
         ] {
-            if let Some(m) = regex::Regex::new(pat).ok().and_then(|r| r.captures(&html)) {
+            if let Some(m) = pat.captures(&html) {
                 if let Some(url) = m.get(1) {
                     // prefer a *.mp4 URL over thumbnails/images
                     let cand = url.as_str().replace("&amp;", "&");

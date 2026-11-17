@@ -43,8 +43,20 @@ pub fn selector(css: &str) -> Option<Selector> {
 }
 
 /// Extract text content from an element, trimmed.
+///
+/// Collects once and trims in place. The previous form
+/// (`collect::<String>().trim().to_string()`) built the full text and then
+/// copied it again to drop the surrounding whitespace — two allocations per
+/// text node, on every element of every parsed page.
 pub fn text(element: &ElementRef) -> String {
-    element.text().collect::<String>().trim().to_string()
+    let mut out: String = element.text().collect();
+    let start = out.len() - out.trim_start().len();
+    if start > 0 {
+        out.drain(..start);
+    }
+    let end = out.trim_end().len();
+    out.truncate(end);
+    out
 }
 
 /// Extract text from first matching element.

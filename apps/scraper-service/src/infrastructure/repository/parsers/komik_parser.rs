@@ -5,6 +5,7 @@ use crate::infrastructure::scraping::parsing_utils::parse_html;
 use crate::infrastructure::scraping::parsing_utils::{
     attr, attr_from, attr_from_or, selector, text, text_from_or,
 };
+use crate::infrastructure::utils::text::contains_ignore_ascii_case;
 use rayon::prelude::*;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -36,6 +37,12 @@ static CHAPTER_TITLE_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)(?:chapter|ch\.?)\s*([\d\.]+)").expect("literal regex"));
 static CHAPTER_NUMBER_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([\d\.]+)").expect("literal regex"));
+/// `/genre/<slug>` inside a genre link.
+static GENRE_SLUG_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/genre/([^/]+)").expect("literal regex"));
+/// Trailing path segment of a URL.
+static SLUG_TAIL_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/([^/]+)/?$").expect("literal regex"));
 
 pub fn parse_genres(html: &str) -> Result<Vec<KomikGenre>, ScrapingError> {
     let document = parse_html(html);
@@ -47,7 +54,7 @@ pub fn parse_genres(html: &str) -> Result<Vec<KomikGenre>, ScrapingError> {
         selector(".ls3p h4, h4").ok_or(ScrapingError::Parse("Selector error".to_string()))?;
     let genre_link_selector =
         selector("a[href*='/genre/']").ok_or(ScrapingError::Parse("Selector error".to_string()))?;
-    let slug_regex = Regex::new(r"/genre/([^/]+)").unwrap();
+    let slug_regex = &*GENRE_SLUG_REGEX;
 
     for element in document.select(&genre_selector) {
         let name = text_from_or(&element, &genre_name_selector, "");
@@ -214,16 +221,37 @@ pub fn parse_komik_chapter_document(
 }
 
 fn clean_text(text: String) -> String {
-    text.replace(['\n', '\t'], " ").trim().to_string()
+    // Replaces and trims in place: the old form allocated a second String for
+    // the `replace` and a third for the `trim().to_string()`.
+    let mut out = if text.contains(['\n', '\t']) {
+        text.replace(['\n', '\t'], " ")
+    } else {
+        text
+    };
+    let start = out.len() - out.trim_start().len();
+    if start > 0 {
+        out.drain(..start);
+    }
+    let end = out.trim_end().len();
+    out.truncate(end);
+    out
 }
 
 fn extract_value_after_keyword(full_text: &str, keywords: &[&str], default_index: usize) -> String {
     let lower_text = full_text.to_lowercase();
-    for keyword in keywords {
-        if let Some(pos) = lower_text.find(&format!("{}:", keyword)) {
-            return clean_text(full_text[pos + keyword.len() + 1..].to_string());
-        } else if let Some(pos) = lower_text.find(&format!("{} ", keyword)) {
-            return clean_text(full_text[pos + keyword.len() + 1..].to_string());
+    // Two passes — every `keyword:` before any `keyword ` — so the lookup order
+    // is exactly what the old `format!("{keyword}:")` / `format!("{keyword} ")`
+    // pair did, without allocating a String per keyword per row.
+    for separator in [b':', b' '] {
+        for keyword in keywords {
+            let mut from = 0;
+            while let Some(relative) = lower_text[from..].find(keyword) {
+                let after = from + relative + keyword.len();
+                if lower_text.as_bytes().get(after) == Some(&separator) {
+                    return clean_text(full_text[after + 1..].to_string());
+                }
+                from = after;
+            }
         }
     }
     if let Some(colon_pos) = full_text.find(':') {
@@ -311,7 +339,7 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         .iter()
         .find_map(|&row| {
             let full_text = text(&row);
-            if full_text.to_lowercase().contains("status") {
+            if contains_ignore_ascii_case(&full_text, "status") {
                 Some(
                     extract_value_after_keyword(&full_text, &["status"], 0)
                         .replace("Status", "")
@@ -330,8 +358,8 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         .iter()
         .find_map(|&row| {
             let full_text = text(&row);
-            if full_text.to_lowercase().contains("jenis komik")
-                || full_text.to_lowercase().contains("type")
+            if contains_ignore_ascii_case(&full_text, "jenis komik")
+                || contains_ignore_ascii_case(&full_text, "type")
             {
                 Some(
                     extract_value_after_keyword(&full_text, &["jenis komik", "type"], 0)
@@ -350,9 +378,9 @@ pub fn parse_komik_detail_document(html: &str) -> Result<DetailData, ScrapingErr
         .iter()
         .find_map(|&row| {
             let full_text = text(&row);
-            if full_text.to_lowercase().contains("pengarang")
-                || full_text.to_lowercase().contains("author")
-                || full_text.to_lowercase().contains("artist")
+            if contains_ignore_ascii_case(&full_text, "pengarang")
+                || contains_ignore_ascii_case(&full_text, "author")
+                || contains_ignore_ascii_case(&full_text, "artist")
             {
                 Some(
                     extract_value_after_keyword(&full_text, &["pengarang", "author", "artist"], 0)
@@ -538,7 +566,7 @@ pub fn parse_genre_page(
         .ok_or(ScrapingError::Parse("Selector error".to_string()))?;
     let next_selector =
         selector("span[hx-get]").ok_or(ScrapingError::Parse("Selector error".to_string()))?;
-    let slug_regex = Regex::new(r"/([^/]+)/?$").unwrap();
+    let slug_regex = &*SLUG_TAIL_REGEX;
 
     for element in document.select(&item_selector) {
         let title = text_from_or(&element, &title_selector, "");
