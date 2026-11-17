@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/MythEclipse/scraper/compare/v1.1.5...v1.1.6) (2026-11-17)
+
+
+### Bug Fixes
+
+* **docker:** build the image with a toolchain the dependency set accepts ([a941b92](https://github.com/MythEclipse/scraper/commit/a941b920fbdd2fc07f57d020e519eba12277b8ce))
+
 ## [1.1.5](https://github.com/MythEclipse/scraper/compare/v1.1.4...v1.1.5) (2026-11-17)
 
 
