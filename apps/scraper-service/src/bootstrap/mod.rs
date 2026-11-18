@@ -82,6 +82,10 @@ impl Application {
         // Initialize OpenTelemetry metrics
         crate::observability::metrics::init_otel_metrics();
 
+        // Start the in-process per-endpoint counters from process boot, so the
+        // public dashboard's uptime figure does not begin at the first request.
+        crate::observability::telemetry::init();
+
         tracing::info!("🚀 Scraper starting up...");
         tracing::info!("   Environment: {}", CONFIG.environment);
 
@@ -123,6 +127,12 @@ impl Application {
             }
         }
 
+        // Restore the dashboard counters Redis kept from earlier runs. This
+        // runs before the listener accepts traffic, so the first render already
+        // shows lifetime totals. A failure here is not fatal: the dashboard
+        // falls back to counting this process only.
+        crate::observability::status_store::hydrate().await;
+
         let app = crate::presentation::router::build_router();
 
         // Shutdown coordination: one watcher turns SIGTERM/SIGINT into a
@@ -134,6 +144,11 @@ impl Application {
             tracing::info!("termination signal received");
             signal_manager.request();
         }));
+
+        // Persist the dashboard counters to Redis once a second, and once more
+        // on the way out. Registered with the manager so the final flush lands
+        // before the process exits.
+        shutdown.register(crate::observability::status_store::start(shutdown.handle()));
 
         // Listener
         let port = CONFIG.server_port;

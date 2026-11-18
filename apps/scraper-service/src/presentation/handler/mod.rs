@@ -1,5 +1,6 @@
 pub mod anime;
 pub mod anime2;
+pub mod dashboard;
 pub mod downloader;
 pub mod health;
 pub mod image;

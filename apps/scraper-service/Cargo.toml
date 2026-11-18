@@ -89,6 +89,9 @@ opentelemetry-otlp = { version = "0.33", features = ["metrics"] }
 
 [dev-dependencies]
 sea-orm = { version = "2.0.4", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid", "mock"] }
+# Drives the real router in tests (`ServiceExt::oneshot`), so the status
+# dashboard is asserted end-to-end through its middleware, not just unit-tested.
+tower = { version = "0.5", features = ["util"] }
 
 [lib]
 name = "scraper_service"

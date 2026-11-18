@@ -53,6 +53,7 @@ use utoipa::OpenApi;
         crate::presentation::handler::downloader::download_pinterest,
         crate::presentation::handler::downloader::download_mega,
         crate::presentation::handler::downloader::download_terabox,
+        crate::presentation::handler::downloader::proxy_terabox,
         crate::presentation::handler::downloader::download_gdrive,
         crate::presentation::handler::downloader::download_mediafire,
         crate::presentation::handler::downloader::download_pixeldrain,
@@ -92,11 +93,14 @@ use utoipa::OpenApi;
         // ── Image module ───────────────────────────────────────────
         crate::presentation::handler::image::brat_handler,
         crate::presentation::handler::image::brat_animated_handler,
+        // ── Service ────────────────────────────────────────────────
+        crate::presentation::handler::health::health_check,
     ),
     components(
         schemas(
             crate::presentation::dto::common::ApiResponse<String>,
             crate::presentation::dto::downloader::DownloadResponse,
+            crate::presentation::handler::health::HealthResponse,
         )
     ),
     tags(
@@ -109,6 +113,7 @@ use utoipa::OpenApi;
         (name = "search", description = "Search endpoints (BMKG, prayer times, weather, YouTube, Google)"),
         (name = "tool", description = "Utility tools (WHOIS, IP lookup, URL shortener, tracking, hosting)"),
         (name = "image", description = "Image generation (brat static & animated)"),
+        (name = "service", description = "Service metadata (health probe)"),
     )
 )]
 pub struct ModuleApiDoc;

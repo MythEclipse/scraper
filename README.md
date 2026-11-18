@@ -1,5 +1,39 @@
 # scraper
 
+## Homepage and public status dashboard
+
+`GET /` serves a server-rendered homepage: service overview, public statistics,
+and a monitor for every documented endpoint. `GET /api/status` returns the same
+snapshot as JSON, which the page polls every five seconds (only while the tab is
+visible) and which any external uptime checker can read directly.
+
+- The endpoint catalog is **derived from the OpenAPI document**, so a route
+  added to `openapi_modules.rs` appears on the homepage immediately — no second
+  list to keep in sync.
+- Counters live in-process (`observability::telemetry`), keyed by the matched
+  route *template* (`GET /api/anime/detail/{slug}`), so memory does not grow
+  with traffic. The request path never talks to Redis.
+- They are **persisted to Redis** by a write-behind loop
+  (`observability::status_store`) once a second, plus a final flush on shutdown,
+  and read back on boot. Totals therefore survive restarts and deploys, and the
+  dashboard shows which store is in use (`statistik tersimpan di Redis` vs
+  `in-process`). The flush writes absolute values, so a retry or a double flush
+  cannot inflate a count.
+- Health per endpoint: `ok` (last call 2xx), `warn` (last call 4xx — alive but
+  rejecting the request), `error` (last call 5xx, or ≥50% of calls did), `idle`
+  (never called), `stale` (last observation older than the staleness window, so
+  no live verdict is asserted).
+- Staleness matters because the counters outlive the process: an endpoint that
+  failed days ago and has not been called since must not page anyone forever.
+  Default window is 1 hour, override with `STATUS_STALE_AFTER_SECS`.
+- The dashboard's own routes (`/`, `/api/status`, `/docs*`, `/favicon.*`) are
+  excluded from the counters, so polling cannot drown out real traffic.
+- `GET /health` stays a monitored public endpoint.
+- Redis is optional. If it is unreachable the service still boots, the dashboard
+  falls back to in-process numbers, and the flush warns once instead of every
+  tick. Drop the stored history with
+  `redis-cli --scan --pattern 'scraper:status:*' | xargs redis-cli DEL`.
+
 ## Releases and container images
 
 Every push to `main` is analysed by [semantic-release](https://semantic-release.gitbook.io/).
