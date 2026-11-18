@@ -487,7 +487,7 @@ fn health_class(health: Health) -> &'static str {
 
 fn health_label(health: Health) -> &'static str {
     match health {
-        Health::Ok => "aktif",
+        Health::Ok => "ok",
         Health::Warn => "warn",
         Health::Error => "error",
         Health::Idle => "idle",
@@ -528,11 +528,11 @@ fn render_page(snapshot: &StatusResponse) -> String {
 fn render_hero(snapshot: &StatusResponse) -> String {
     let overall = health_class(snapshot.overall);
     let status_text = match snapshot.overall {
-        Health::Ok => "Semua endpoint sehat",
-        Health::Warn => "Sebagian endpoint menolak request",
-        Health::Error => "Ada endpoint yang error",
-        Health::Idle => "Menunggu request pertama",
-        Health::Stale => "Data terakhir sudah lama",
+        Health::Ok => "All endpoints healthy",
+        Health::Warn => "Some endpoints are rejecting requests",
+        Health::Error => "An endpoint is failing",
+        Health::Idle => "Waiting for the first request",
+        Health::Stale => "Last observation is old",
     };
     let env = escape_html(&snapshot.service.environment);
     let version = escape_html(&snapshot.service.version);
@@ -546,7 +546,7 @@ fn render_hero(snapshot: &StatusResponse) -> String {
       <span class="logo">S</span>
       <div>
         <h1>Scraper API</h1>
-        <p class="tagline">Scraping &amp; media download service — satu API untuk anime, komik, media sosial, dan utilitas.</p>
+        <p class="tagline">Scraping &amp; media download service — one API for anime, comics, social media, and utilities.</p>
       </div>
     </div>
     <div class="overall overall-{overall}" id="overall">
@@ -558,17 +558,17 @@ fn render_hero(snapshot: &StatusResponse) -> String {
     <span class="chip">v{version}</span>
     <span class="chip">{env}</span>
     <span class="chip">uptime <b id="uptime">{uptime}</b></span>
-    <span class="chip">{ops} endpoint terdokumentasi</span>
-    <span class="chip">statistik <b id="persistence">{persistence_label}</b></span>
-    <span class="chip chip-live">live · <b id="updated">baru saja</b></span>
+    <span class="chip">{ops} documented endpoints</span>
+    <span class="chip">stats <b id="persistence">{persistence_label}</b></span>
+    <span class="chip chip-live">live · <b id="updated">just now</b></span>
   </div>
   <div class="pulse-panel">
     <div class="pulse-head">
-      <span class="pulse-title">Trafik 60 detik terakhir</span>
-      <span class="pulse-now"><b id="pulse-peak">{peak}</b> puncak/detik · <b id="pulse-total">{pulse_total}</b> total</span>
+      <span class="pulse-title">Traffic, last 60 seconds</span>
+      <span class="pulse-now"><b id="pulse-peak">{peak}</b> peak/s · <b id="pulse-total">{pulse_total}</b> total</span>
     </div>
     <svg id="spark" viewBox="0 0 600 56" preserveAspectRatio="none" role="img"
-         aria-label="Grafik trafik per detik selama 60 detik terakhir">
+         aria-label="Per-second traffic chart for the last 60 seconds">
       <defs>
         <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color='#5aa2ff' stop-opacity=".38" />
@@ -605,7 +605,7 @@ fn render_hero(snapshot: &StatusResponse) -> String {
 /// Redis, where the numbers restart with the process.
 fn persistence_label(persistence: &str) -> &'static str {
     match persistence {
-        "redis" => "tersimpan di Redis",
+        "redis" => "persisted in Redis",
         _ => "in-process",
     }
 }
@@ -620,34 +620,34 @@ fn render_cards(snapshot: &StatusResponse) -> String {
         stats.ok, stats.client_errors, stats.server_errors
     );
     let ep_detail = format!(
-        "{} aktif · {} warn · {} error · {} stale · {} idle",
+        "{} ok · {} warn · {} error · {} stale · {} idle",
         counts.ok, counts.warn, counts.error, counts.stale, counts.idle
     );
     format!(
         r#"<section class="cards">
   <article class="card" style="--card-accent: var(--accent)">
     <div class="card-head">
-      <span class="card-label">Total request</span>
+      <span class="card-label">Total requests</span>
       <span class="card-icon" aria-hidden="true">Σ</span>
     </div>
     <strong class="card-value" id="stat-total">{total}</strong>
-    <span class="card-note">sejak proses start</span>
+    <span class="card-note">since process start</span>
   </article>
   <article class="card" style="--card-accent: var(--accent-2)">
     <div class="card-head">
-      <span class="card-label">Request / menit</span>
+      <span class="card-label">Requests / minute</span>
       <span class="card-icon" aria-hidden="true">⟳</span>
     </div>
     <strong class="card-value" id="stat-rpm">{rpm}</strong>
-    <span class="card-note">60 detik terakhir</span>
+    <span class="card-note">last 60 seconds</span>
   </article>
   <article class="card" style="--card-accent: var(--ok)">
     <div class="card-head">
-      <span class="card-label">Sedang diproses</span>
+      <span class="card-label">In flight</span>
       <span class="card-icon" aria-hidden="true">◉</span>
     </div>
     <strong class="card-value" id="stat-inflight">{inflight}</strong>
-    <span class="card-note">request in-flight</span>
+    <span class="card-note">requests being handled</span>
   </article>
   <article class="card" style="--card-accent: var(--error)">
     <div class="card-head">
@@ -659,7 +659,7 @@ fn render_cards(snapshot: &StatusResponse) -> String {
   </article>
   <article class="card" style="--card-accent: var(--warn)">
     <div class="card-head">
-      <span class="card-label">Endpoint dipantau</span>
+      <span class="card-label">Endpoints monitored</span>
       <span class="card-icon" aria-hidden="true">⌗</span>
     </div>
     <strong class="card-value" id="stat-endpoints">{endpoints}</strong>
@@ -683,12 +683,12 @@ fn render_monitor(snapshot: &StatusResponse) -> String {
   <div class="monitor-head">
     <div>
       <h2>Monitor per endpoint</h2>
-      <p class="section-note">Status dihitung dari response terakhir dan rasio 5xx sejak proses start.</p>
+      <p class="section-note">Health is derived from the last response and the 5xx ratio since process start.</p>
     </div>
     <div class="controls">
-      <input id="search" type="search" placeholder="Cari path atau nama endpoint…" autocomplete="off" />
+      <input id="search" type="search" placeholder="Search path or endpoint name…" autocomplete="off" />
       <div class="filters" id="filters">
-        <button class="filter active" data-filter="all">Semua</button>
+        <button class="filter active" data-filter="all">All</button>
         <button class="filter" data-filter="error"><span class="fdot"></span>Error</button>
         <button class="filter" data-filter="warn"><span class="fdot"></span>Warn</button>
         <button class="filter" data-filter="stale"><span class="fdot"></span>Stale</button>
@@ -702,7 +702,7 @@ fn render_monitor(snapshot: &StatusResponse) -> String {
     // Rendered hidden when traffic already exists; the poller toggles it, so a
     // service that goes quiet does not keep a stale "no traffic yet" claim.
     html.push_str(&format!(
-        r#"  <p class="cold-start" id="cold-start"{}>Belum ada request yang tercatat sejak proses start — semua endpoint tampil <b>idle</b> sampai dipanggil.</p>
+        r#"  <p class="cold-start" id="cold-start"{}>No requests recorded since process start — every endpoint shows <b>idle</b> until it is called.</p>
 "#,
         if snapshot.cold_start { "" } else { " hidden" }
     ));
@@ -894,13 +894,13 @@ fn render_row(endpoint: &EndpointView) -> String {
 // ============================================================================
 
 const PAGE_HEAD: &str = r#"<!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="dark light" />
-<meta name="description" content="Scraper API — statistik publik dan monitor status per endpoint." />
-<title>Scraper API — Status &amp; Statistik</title>
+<meta name="description" content="Scraper API — public statistics and per-endpoint status monitor." />
+<title>Scraper API — Status &amp; Statistics</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="/favicon.ico" sizes="any" />
 <style>
@@ -1195,7 +1195,7 @@ footer code { font-family: var(--mono); color: var(--muted); }
 "#;
 
 const PAGE_FOOT: &str = r#"<footer>
-  <span>Scraper API — <code>Rust</code> + <code>Axum</code>. Statistik dihitung in-process dan disimpan ke Redis tiap detik, jadi totalnya bertahan setelah restart.</span>
+  <span>Scraper API — <code>Rust</code> + <code>Axum</code>. Counters are kept in-process and flushed to Redis every second, so totals survive a restart.</span>
   <span>Auto-refresh 5s · <a href="/api/status">status JSON</a></span>
 </footer>
 <script>
@@ -1208,7 +1208,7 @@ const PAGE_FOOT: &str = r#"<footer>
   var uptimeEl = document.getElementById("uptime");
   var updatedEl = document.getElementById("updated");
 
-  var LABELS = { ok: "aktif", warn: "warn", error: "error", idle: "idle", stale: "stale" };
+  var LABELS = { ok: "ok", warn: "warn", error: "error", idle: "idle", stale: "stale" };
 
   function pct(fraction) {
     return (fraction * 100).toFixed(2) + "%";
@@ -1219,8 +1219,8 @@ const PAGE_FOOT: &str = r#"<footer>
     var h = Math.floor((secs % 86400) / 3600);
     var m = Math.floor((secs % 3600) / 60);
     var s = secs % 60;
-    if (d > 0) return d + "h " + h + "j " + m + "m";
-    if (h > 0) return h + "j " + m + "m " + s + "s";
+    if (d > 0) return d + "d " + h + "h " + m + "m";
+    if (h > 0) return h + "h " + m + "m " + s + "s";
     if (m > 0) return m + "m " + s + "s";
     return s + "s";
   }
@@ -1464,11 +1464,11 @@ const PAGE_FOOT: &str = r#"<footer>
           data.stats.server_errors + " 5xx");
         setText("stat-endpoints", String(data.counts.total));
         setText("stat-endpoint-detail",
-          data.counts.ok + " aktif · " + data.counts.warn + " warn · " +
+          data.counts.ok + " ok · " + data.counts.warn + " warn · " +
           data.counts.error + " error · " + data.counts.stale + " stale · " +
           data.counts.idle + " idle");
         setText("uptime", duration(data.service.uptime_secs));
-        setText("persistence", data.persistence === "redis" ? "tersimpan di Redis" : "in-process");
+        setText("persistence", data.persistence === "redis" ? "persisted in Redis" : "in-process");
 
         if (data.throughput) {
           renderSpark(data.throughput);
@@ -1486,11 +1486,11 @@ const PAGE_FOOT: &str = r#"<footer>
           overallEl.className = "overall overall-" + data.overall;
         }
         if (overallText) {
-          overallText.textContent = data.overall === "ok" ? "Semua endpoint sehat"
-            : data.overall === "warn" ? "Sebagian endpoint menolak request"
-            : data.overall === "error" ? "Ada endpoint yang error"
-            : data.overall === "stale" ? "Data terakhir sudah lama"
-            : "Menunggu request pertama";
+          overallText.textContent = data.overall === "ok" ? "All endpoints healthy"
+            : data.overall === "warn" ? "Some endpoints are rejecting requests"
+            : data.overall === "error" ? "An endpoint is failing"
+            : data.overall === "stale" ? "Last observation is old"
+            : "Waiting for the first request";
         }
         if (updatedEl) {
           var when = new Date(data.generated_at_ms);
@@ -1641,6 +1641,62 @@ mod tests {
             snap.counts.total >= 80,
             "monitor is missing endpoints: {}",
             snap.counts.total
+        );
+    }
+
+    #[test]
+    fn the_page_is_entirely_in_english() {
+        // The dashboard is public-facing, so its copy is English. This guards
+        // against a stray Indonesian string creeping back in during a redesign:
+        // it checks the rendered page, not the source, so a value that only
+        // reaches the HTML through a helper is covered too.
+        let html = render_page(&snapshot());
+        let mut checked = 0;
+        for word in [
+            "sejak",
+            "Semua",
+            "aktif",
+            "tersimpan",
+            "diperbarui",
+            "baru saja",
+            "Menunggu",
+            "Sebagian",
+            "Trafik",
+            "puncak",
+            "diproses",
+            "Belum ada",
+            "dihitung",
+            "dipantau",
+            "tersedia",
+            "Cari ",
+            "detik",
+            "menit",
+            "dan ",
+            "untuk ",
+            "yang ",
+        ] {
+            checked += 1;
+            assert!(
+                !html.contains(word),
+                "rendered page still contains Indonesian text `{word}`"
+            );
+        }
+        assert!(checked >= 20, "the guard should cover a real word list");
+
+        // The document language must match the copy.
+        assert!(html.contains(r#"<html lang="en">"#), "lang should be `en`");
+
+        // The <title> is easy to miss because it is not body text, and it is
+        // what a browser tab and a search result show.
+        let title = html
+            .split("<title>")
+            .nth(1)
+            .and_then(|rest| rest.split("</title>").next())
+            .unwrap_or_default();
+        assert!(!title.is_empty(), "the page needs a <title>");
+        assert!(
+            !title.contains("Statistik"),
+            "the <title> is still Indonesian: {title}"
         );
     }
 
