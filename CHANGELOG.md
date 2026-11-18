@@ -5,6 +5,13 @@
 
 * **dashboard:** serve the page entirely in English ([854a32f](https://github.com/MythEclipse/scraper/commit/854a32f177e9a4aac012cf29b88b75347804f4c0))
 
+# [1.3.0](https://github.com/MythEclipse/scraper/compare/v1.2.1...v1.3.0) (2026-11-18)
+
+
+### Features
+
+* **dashboard:** serve the page entirely in English ([854a32f](https://github.com/MythEclipse/scraper/commit/854a32f177e9a4aac012cf29b88b75347804f4c0))
+
 ## [1.2.1](https://github.com/MythEclipse/scraper/compare/v1.2.0...v1.2.1) (2026-11-18)
 
 
