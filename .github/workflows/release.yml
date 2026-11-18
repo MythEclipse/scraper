@@ -82,13 +82,37 @@ jobs:
       # published, and writes the version to GITHUB_OUTPUT. The image jobs read
       # that one value, so no second place derives a version and the two can
       # never disagree about what v1.4.2 means.
+      #
+      # `|| true` + the follow-up push is a deliberate workaround for a race in
+      # semantic-release itself. It tags the release commit and then runs a bare
+      # `git push --tags`, while @semantic-release/git pushes the bump commit
+      # with `git push --tags origin HEAD:<branch>` — two separate pushes of two
+      # refs that depend on each other. When the tag lands first the server
+      # rejects it with `missing necessary objects`, the release job fails, and
+      # the image jobs are skipped even though the bump commit did reach the
+      # remote. Retrying the tag push once the commit is visible resolves it.
+      # Verified against run 44303529655, where exactly that happened.
       - name: Run semantic-release
         id: publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-          semantic-release
+          status=0
+          semantic-release || status=$?
+          if [[ "$status" -ne 0 ]]; then
+            # A failed run is only recoverable if it published a version. If
+            # semantic-release never got that far there is nothing to retry and
+            # the original failure must surface.
+            if [[ -z "${version:-}" ]]; then
+              echo "::error::semantic-release failed before determining a version"
+              exit "$status"
+            fi
+            echo "::warning::semantic-release exited $status; retrying the tag push"
+            # The bump commit is already on the branch, so the tag's objects are
+            # now present and the push succeeds.
+            git push --tags
+          fi
           echo "release version: ${version:-<none — this push needs no release>}"
 
   prepare:
