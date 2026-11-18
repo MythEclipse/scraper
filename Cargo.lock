@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "scraper-gateway"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "anyhow",
  "mimalloc",
@@ -3030,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "scraper-service"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "aes",
  "anyhow",
