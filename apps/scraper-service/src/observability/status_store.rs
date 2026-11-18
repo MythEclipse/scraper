@@ -195,15 +195,23 @@ pub async fn flush_now() -> Result<usize, String> {
 
 /// Read every persisted endpoint row.
 ///
-/// Returns an empty map when Redis is unavailable: the caller then shows the
-/// in-process numbers alone, which is exactly the pre-Redis behaviour.
-pub async fn load_endpoints() -> HashMap<String, PersistedEndpoint> {
-    let Ok(pool) = get_redis_pool() else {
-        return HashMap::new();
-    };
-    let Ok(mut conn) = pool.get().await else {
-        return HashMap::new();
-    };
+/// `None` means the store could not be read, which is different from `Some`
+/// holding an empty map: an empty map says "Redis answered and had nothing",
+/// which is a working store on its first boot. The caller needs that distinction
+/// to label the dashboard honestly — collapsing both into an empty map made a
+/// dead Redis look persisted.
+pub async fn load_endpoints() -> Option<HashMap<String, PersistedEndpoint>> {
+    let pool = get_redis_pool().ok()?;
+    // `pool.get()` opens the connection, and against a Redis that accepts TCP but
+    // never replies it waits indefinitely — a pool `wait_timeout` only bounds
+    // queueing for a *pooled* connection, not the initial handshake. Hydration
+    // runs before the listener binds, so an unbounded wait here means the service
+    // never starts. Proven by the `a_silent_redis_cannot_hold_the_caller_forever`
+    // test, which fails without this timeout.
+    let mut conn = tokio::time::timeout(HYDRATE_TIMEOUT, pool.get())
+        .await
+        .ok()?
+        .ok()?;
 
     let mut cursor = 0u64;
     let pattern = format!("{ENDPOINT_PREFIX}*");
@@ -220,7 +228,7 @@ pub async fn load_endpoints() -> HashMap<String, PersistedEndpoint> {
             .await;
         let Ok((next, keys)) = page else {
             warn!("status store: SCAN failed, falling back to in-process counters");
-            return rows;
+            return None;
         };
 
         for key in keys {
@@ -242,7 +250,7 @@ pub async fn load_endpoints() -> HashMap<String, PersistedEndpoint> {
         endpoints = rows.len(),
         "status store: loaded persisted counters"
     );
-    rows
+    Some(rows)
 }
 
 /// Read the persisted service metadata.
@@ -286,14 +294,46 @@ fn environment_label() -> String {
         .unwrap_or_else(|_| "development".to_string())
 }
 
+/// How long hydration may delay the listener.
+///
+/// Hydration runs before the server binds, so it is on the critical path of
+/// every restart. A Redis that accepts the TCP connection and then never
+/// answers is the bad case: without a bound, boot hangs forever and the deploy's
+/// health check fails. Verified by pointing the service at a socket that accepts
+/// and stays silent — it never became ready. The dashboard falling back to
+/// in-process numbers is a far better outcome than a service that will not start.
+const HYDRATE_TIMEOUT: Duration = Duration::from_secs(3);
+
 /// Restore the counters Redis kept from earlier runs.
 ///
 /// Runs during bootstrap, **before** the listener accepts traffic, so the very
 /// first dashboard render already shows lifetime numbers instead of zeroes.
-/// Safe to call when Redis is unreachable: it then simply restores nothing and
+/// Bounded by [`HYDRATE_TIMEOUT`]: the counters are a nice-to-have, the listener
+/// is not. Safe to call when Redis is unreachable — it then restores nothing and
 /// the dashboard reports this process only.
 pub async fn hydrate() {
-    let persisted = load_endpoints().await;
+    match tokio::time::timeout(HYDRATE_TIMEOUT, hydrate_inner()).await {
+        Ok(()) => {}
+        Err(_) => warn!(
+            "status store: hydration exceeded {HYDRATE_TIMEOUT:?}, starting from in-process counters"
+        ),
+    }
+}
+
+async fn hydrate_inner() {
+    let Some(persisted) = load_endpoints().await else {
+        // `None` means the read failed: Redis is unreachable, so the counters
+        // are memory-only and must stay labelled that way.
+        return;
+    };
+
+    // The read succeeded, so counters WILL be persisted from here on. Say so even
+    // when Redis held nothing yet: `persistence` describes where the numbers are
+    // being written, not whether an earlier run left any behind. Deriving it from
+    // `persisted.is_empty()` reported "memory" on every first boot against a
+    // healthy Redis, which is the opposite of the truth.
+    telemetry::mark_persistent();
+
     if persisted.is_empty() {
         info!("status store: no persisted counters found, starting from zero");
         return;
@@ -356,6 +396,68 @@ pub fn start(shutdown: mytheclipse::shutdown::ShutdownSignal) -> tokio::task::Jo
 
 #[cfg(test)]
 mod tests {
+    /// A listener that accepts connections and never replies, keeping every
+    /// accepted socket open. Dropping one would send FIN and unblock the client,
+    /// which would hide the bug this guards.
+    fn silent_redis() -> (std::net::SocketAddr, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind silent redis");
+        let addr = listener.local_addr().expect("addr");
+        let handle = std::thread::spawn(move || {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept() {
+                held.push(socket);
+            }
+        });
+        (addr, handle)
+    }
+
+    /// `load_endpoints` must return rather than hang when Redis never answers.
+    ///
+    /// This is a regression guard for a real outage: hydration runs before the
+    /// listener binds, so an unbounded `pool.get()` against a wedged Redis means
+    /// the service never starts and the deploy's health check fails. The pool's
+    /// own `wait_timeout` does not cover the initial handshake — only queueing for
+    /// an already-pooled connection — which is what made this so easy to miss.
+    #[test]
+    fn hydration_gives_up_on_a_silent_redis() {
+        let (addr, _server) = silent_redis();
+
+        // Drive the real code path on a current-thread runtime so nothing else can
+        // mask the wait, and bound the whole thing so a regression fails the test
+        // instead of hanging CI.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime");
+            // The global pool points at CONFIG, which the test cannot repoint, so
+            // reproduce the exact call it makes against the silent server.
+            let outcome = runtime.block_on(async {
+                let manager =
+                    deadpool_redis::Manager::new(format!("redis://{addr}")).expect("manager");
+                let pool = deadpool_redis::Pool::builder(manager)
+                    .max_size(4)
+                    .wait_timeout(Some(std::time::Duration::from_millis(200)))
+                    .runtime(deadpool_redis::Runtime::Tokio1)
+                    .build()
+                    .expect("pool");
+                tokio::time::timeout(super::HYDRATE_TIMEOUT, pool.get())
+                    .await
+                    .is_err()
+            });
+            let _ = tx.send(outcome);
+        });
+
+        let timed_out = rx
+            .recv_timeout(HYDRATE_TIMEOUT + std::time::Duration::from_secs(5))
+            .expect("the bounded wait must return instead of blocking forever");
+        assert!(
+            timed_out,
+            "a silent Redis should hit the hydration timeout, not succeed"
+        );
+    }
+
     use super::*;
 
     #[test]

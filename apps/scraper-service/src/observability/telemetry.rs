@@ -106,19 +106,23 @@ pub fn hydrate(
         entry_for(&key).seed(&row);
     }
 
-    let label = if restored > 0 { "redis" } else { "memory" };
-    // `try_lock` is enough: hydration runs before the server starts, so there is
-    // no contention. If it somehow fails, the default label is the safe one.
-    if let Ok(mut slot) = PERSISTENCE.try_lock() {
-        *slot = label;
-    }
-
     tracing::info!(
         endpoints = restored,
         started_at_ms = meta.as_ref().map(|m| m.started_at_ms).unwrap_or(0),
         previous_version = meta.as_ref().map(|m| m.version.as_str()).unwrap_or("-"),
         "telemetry: hydrated from persistent store"
     );
+}
+
+/// Record that the counters are being written to Redis.
+///
+/// Called once by the status store after a successful round trip, not derived
+/// from how much history was found: a fresh Redis with no keys is still a
+/// working store, and labelling it `memory` told the operator the opposite.
+pub fn mark_persistent() {
+    if let Ok(mut slot) = PERSISTENCE.try_lock() {
+        *slot = "redis";
+    }
 }
 
 /// Which store the counters are backed by: `redis` or `memory`.
