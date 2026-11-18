@@ -93,19 +93,24 @@ COPY apps ./apps
 # here is a safe, build-only optimisation that does not affect the output.
 RUN cargo build --release --locked --bin scraper
 
-# Prove the artifact is sound in the SAME image it will run in: resolve every
-# dynamic library, and assert the libc it needs is the libc this image has.
-# A missing libssl here would otherwise surface as a crash on first request.
+# Prove the artifact is sound in the SAME image it will run in: every dynamic
+# library must resolve, and the libc it needs must be the libc this image has.
+# An unresolved library here would otherwise surface as a crash on first request.
+#
+# The list below is what this binary actually links, not a guess. Every TLS
+# dependency is rustls-based (sea-orm/sqlx `runtime-tokio-rustls`, redis
+# `tokio-rustls-comp`), so there is deliberately no libssl/libcrypto here —
+# asserting them failed the build on a perfectly good binary. Re-check with
+# `ldd target/release/scraper` before adding an entry.
 #
 # The libc assertion matches /(usr/)?lib/ rather than a literal /lib: Ubuntu is
-# merged-/usr, so /lib is a symlink to /usr/lib and every library above resolved
-# under /usr/lib/x86_64-linux-gnu. The literal form failed on a perfectly good
-# binary, which is worse than no check at all.
+# merged-/usr, so /lib is a symlink to /usr/lib and libraries resolve under
+# /usr/lib/x86_64-linux-gnu.
 #
 # Comments cannot live inside a backslash-continued RUN: the shell receives them
 # as commands and the parser reports `unknown instruction: echo`.
 RUN ldd target/release/scraper \
- && for lib in libc.so.6 libssl.so.3 libcrypto.so.3 libz.so.1 libzstd.so.1 libgcc_s.so.1; do \
+ && for lib in libc.so.6 libm.so.6 libgcc_s.so.1; do \
       ldd target/release/scraper | grep -q "$lib" \
         || { echo "FAIL: release binary no longer links $lib"; exit 1; }; \
     done \
