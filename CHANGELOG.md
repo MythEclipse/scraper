@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/MythEclipse/scraper/compare/v1.2.0...v1.2.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **docker:** assert the libraries the binary actually links ([9485a37](https://github.com/MythEclipse/scraper/commit/9485a377b469e42b05c500f62d2ff5f0ff96a771))
+
 # [1.2.0](https://github.com/MythEclipse/scraper/compare/v1.1.6...v1.2.0) (2026-11-18)
 
 
