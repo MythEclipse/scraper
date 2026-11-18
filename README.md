@@ -36,19 +36,59 @@ visible) and which any external uptime checker can read directly.
 
 ## Releases and container images
 
-Every push to `main` is analysed by [semantic-release](https://semantic-release.gitbook.io/).
-The commit prefix decides the version bump — nobody types a version number:
+The version is decided **on your machine, before the push**, by a git hook — not
+by CI. This is the same mechanism `9router` uses, and it exists because deciding
+the version in CI meant pushing two interdependent refs (a bump commit and a
+tag). When the tag was attempted first the server rejected it with
+`missing necessary objects` and the release was lost; that happened on three
+consecutive releases here.
 
-| Commit | Result |
+### How it works
+
+`lefthook` (installed by `npm run prepare`) runs `scripts/bump-version.mjs` on
+pre-push. The script reads the commits you are about to push and picks a bump:
+
+| Push range contains | Bump |
 |---|---|
-| `feat(scope): …` | minor bump |
-| `fix(scope): …` | patch bump |
-| `BREAKING CHANGE:` in the footer | major bump |
-| `chore`, `ci`, `docs`, `refactor`, `test`, `build` | patch bump, or no release at all |
+| any `feat(...)` / `feat:` commit | major |
+| 5 or more changed files | minor |
+| anything else | patch |
 
-A release publishes a tag, a GitHub Release and the changelog. The same workflow
-then builds and pushes one container image per service to GHCR at exactly that
-version, so an image tag always matches a git tag:
+It then writes that version into `Cargo.toml` (`[workspace.package]`) **and**
+`package.json`, regenerates `Cargo.lock` (CI builds with `--locked`, so a stale
+lock is a failed build), and commits all three as
+`chore: adjust package.json version (bump)`.
+
+The hook then **stops the push once, on purpose**. The bump commit was created
+during the push, so the in-flight ref cannot contain it — pushing anyway would
+publish the *old* version. Push again and the bump commit goes with it.
+
+```bash
+git push            # hook bumps, commits, and stops
+git push            # ships the code plus the bump commit
+```
+
+Re-running the script on an already-bumped range is a no-op, so a third push
+does not bump twice. Bumping with nothing pending is also a no-op.
+
+### Tagging a release
+
+Pushing commits does not publish anything. A release is a tag:
+
+```bash
+git tag v1.4.0
+git push origin v1.4.0
+```
+
+The tag must match both manifests, and CI enforces that — a tag that disagrees
+with `Cargo.toml` or `package.json` fails the `Validate release tag` job instead
+of publishing an image whose `/health` reports a different version. The tag also
+has to be pushed by you: a tag pushed with `GITHUB_TOKEN` does not trigger
+workflows at all, which is the whole reason the old design had to do everything
+in one run.
+
+That tag then builds and pushes one container image per service to GHCR at
+exactly that version, so an image tag always matches a git tag:
 
 This repo publishes 1 image(s):
 
@@ -91,12 +131,20 @@ tagged but never promote `latest`.
 
 ### If a release fails
 
-Check the run, then fix forward with a normal commit — do not re-tag by hand:
+Check the run:
 
 ```bash
 gh run list --workflow=release.yml --limit 5
 gh run view <run-id> --log-failed
 ```
 
-A run that only built images and published no tag is normal for a `chore` push:
-there was nothing to release, so no version was derived and no image was tagged.
+If the tag and the manifests disagree, bump, commit, push, and re-tag:
+
+```bash
+node scripts/bump-version.mjs   # or: npm run bump
+git push
+git tag -f v1.4.0 && git push -f origin v1.4.0
+```
+
+`git push` on its own never publishes an image: no tag, no release. That is
+intentional, and it is why a normal commit push shows no release run at all.

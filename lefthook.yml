@@ -1,0 +1,47 @@
+# Git hooks for this repo.
+#
+# Installed by `npm run prepare` (lefthook install), which runs on `npm install`.
+# Run `bunx lefthook install` by hand after cloning if you have no npm install step.
+#
+# The pre-push hook is the whole versioning mechanism. There is no
+# semantic-release here: a version is decided from the commits about to be
+# pushed, written into every manifest, and committed *before* the push leaves the
+# machine. That removes the failure this repo kept hitting, where a CI-side
+# release tool tagged a commit the server had not received yet and the tag was
+# rejected with `missing necessary objects`.
+pre-commit:
+  commands:
+    fmt:
+      # Formatting is cheap and mechanical, so fix it rather than report it.
+      # `--check` would fail a commit over whitespace the author cannot see.
+      glob: "*.rs"
+      run: cargo fmt --all
+      stage_fixed: true
+
+    clippy:
+      # Mirrors CI exactly, including its deliberate lack of `-D warnings`.
+      # The lib carries ~80 pre-existing clippy warnings (mostly unwrap/expect,
+      # which this crate's own lints only warn on). Promoting them to errors here
+      # would block every commit on work unrelated to the change — the same
+      # reason the deploy workflow reports them without gating. The deny-level
+      # lints from Cargo.toml `[workspace.lints]` (panic, todo, unimplemented,
+      # dead_code, unused_*) are still real errors and do fail.
+      glob: "*.rs"
+      run: cargo clippy --lib --bins --all-features
+
+pre-push:
+  commands:
+    test:
+      # Unit and integration tests before anything leaves the machine. Slower
+      # than clippy, which is why it sits here and not in pre-commit.
+      run: cargo test --locked
+
+    bump:
+      # The bump commit is created during this hook, so the current push ref is
+      # already fixed and cannot include it. Stop once; the next `git push` sends
+      # the new bump commit instead of silently publishing the old version.
+      #
+      # This is why `git push` appears to fail the first time. It is by design:
+      # a version left uncommitted would ship the old number and leave dirt for
+      # the next push to bump again from a stale base.
+      run: node scripts/bump-version.mjs --block-push-after-bump

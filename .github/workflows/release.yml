@@ -1,15 +1,24 @@
 name: Release
 
-# One workflow, three jobs: derive the version from conventional commits, read
-# the image list, then build and publish those images at that version.
+# Tag-driven release: the version is decided on the developer's machine by the
+# pre-push hook (lefthook + scripts/bump-version.mjs), committed into every
+# manifest, and published by pushing a `vX.Y.Z` tag. CI never invents a version.
 #
-# Deliberately NOT two workflows chained by `release: published` or
-# `push: tags: v*`. GitHub suppresses workflow runs for events created with
-# GITHUB_TOKEN, so an event semantic-release creates never starts a downstream
-# workflow. Measured on kbbi-api: the release job published v1.0.0 while the
-# separate publish workflow recorded 0 runs for event=release. A tag trigger
-# fails identically — the tag is pushed with the same token. Keeping it in one
-# workflow needs no PAT.
+# This replaces semantic-release, which decided the version in CI and then had to
+# push both a bump commit and a tag — two refs, two pushes, each depending on the
+# other. When the tag was attempted before the commit was visible the server
+# rejected it with `missing necessary objects` and the release was lost. That
+# happened on three consecutive releases here. Moving the decision before the
+# push removes the race instead of retrying around it.
+#
+# The trade is one manual step: after pushing your commits, create the tag:
+#
+#     git tag v1.4.0 && git push origin v1.4.0
+#
+# The tag is pushed by a human with real credentials, so it triggers this
+# workflow. (A tag pushed with GITHUB_TOKEN would not: GitHub suppresses runs for
+# events that token creates. That suppression is exactly why the old design had
+# to do everything inside one workflow run.)
 #
 # The three jobs are separate because a job-level `strategy.matrix` cannot read
 # `steps.*`: the matrix is evaluated before any step runs. A matrix built from
@@ -18,24 +27,26 @@ name: Release
 # list is resolved by a job (whose output the next job's matrix CAN read).
 on:
   push:
-    branches: [main, master]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing vX.Y.Z tag to republish"
+        required: true
+        type: string
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
   # Without packages: write the GHCR push fails with 403. Declared at workflow
   # level so a future job cannot silently lose it; the token is still scoped to
   # THIS repository's packages only.
   packages: write
 
 jobs:
-  release:
-    # Dependabot's conventional commits are dependency churn, not intent.
-    if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
+  validate:
+    name: Validate release tag
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     # One release at a time, repo-wide, and never cancel one half-published. A
     # per-ref group would let two pushes both read the same "latest tag" and
     # race to create the same version.
@@ -43,83 +54,62 @@ jobs:
     # Scoped to this job on purpose: applying it workflow-wide would make a
     # ten-minute image build block the next push's release run, and those two do
     # not contend for anything.
+    # One release at a time, repo-wide, and never cancel one half-published.
     concurrency:
-      group: semantic-release
+      group: release-tag
       cancel-in-progress: false
     outputs:
-      # Empty when this push produced no release. That is the only gate the
-      # image jobs trust: a chore-only push leaves it empty and builds nothing.
-      version: ${{ steps.publish.outputs.version }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # semantic-release reads every commit since the last tag to decide the
-          # bump, so a shallow clone makes it see nothing and publish nothing.
-          # Depth 0 is a requirement here, not an optimisation.
-          fetch-depth: 0
-          persist-credentials: true
+          ref: ${{ inputs.release_tag || github.ref_name }}
+          fetch-depth: 1
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      # Installed with --prefix, not as a devDependency: it must not touch
-      # package.json or the lockfile, because semantic-release commits
-      # package.json and a lockfile churn here would fight that commit.
-      - name: Install semantic-release
-        run: |
-          npm install --prefix "$RUNNER_TEMP/sr" --no-save \
-            semantic-release@^24 \
-            @semantic-release/changelog@^6 \
-            @semantic-release/exec@^6 \
-            @semantic-release/git@^10 \
-            @semantic-release/npm@^12
-          echo "$RUNNER_TEMP/sr/node_modules/.bin" >> "$GITHUB_PATH"
-
-      # successCmd in .releaserc.json runs only when a release was really
-      # published, and writes the version to GITHUB_OUTPUT. The image jobs read
-      # that one value, so no second place derives a version and the two can
-      # never disagree about what v1.4.2 means.
-      #
-      # `|| true` + the follow-up push is a deliberate workaround for a race in
-      # semantic-release itself. It tags the release commit and then runs a bare
-      # `git push --tags`, while @semantic-release/git pushes the bump commit
-      # with `git push --tags origin HEAD:<branch>` — two separate pushes of two
-      # refs that depend on each other. When the tag lands first the server
-      # rejects it with `missing necessary objects`, the release job fails, and
-      # the image jobs are skipped even though the bump commit did reach the
-      # remote. Retrying the tag push once the commit is visible resolves it.
-      # Verified against run 44303529655, where exactly that happened.
-      - name: Run semantic-release
-        id: publish
+      # The tag is the source of truth, and it must agree with the manifests.
+      # A mismatch means someone tagged without running the bump, so the image
+      # would be published under a version the binary does not report about
+      # itself (`/health` reads CARGO_PKG_VERSION). Reject it here rather than
+      # ship that.
+      - name: Validate tag against the manifests
+        id: check
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           set -Eeuo pipefail
-          status=0
-          semantic-release || status=$?
-          if [[ "$status" -ne 0 ]]; then
-            # A failed run is only recoverable if it published a version. If
-            # semantic-release never got that far there is nothing to retry and
-            # the original failure must surface.
-            if [[ -z "${version:-}" ]]; then
-              echo "::error::semantic-release failed before determining a version"
-              exit "$status"
-            fi
-            echo "::warning::semantic-release exited $status; retrying the tag push"
-            # The bump commit is already on the branch, so the tag's objects are
-            # now present and the push succeeds.
-            git push --tags
+          # Docker-safe semver: `1` and `latest` are both legal image tags that
+          # would quietly overwrite the wrong thing, so the shape is enforced.
+          if ! [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$RELEASE_TAG' is not a Docker-safe semver tag like v1.4.0"
+            exit 1
           fi
-          echo "release version: ${version:-<none — this push needs no release>}"
+          version="${RELEASE_TAG#v}"
+          # Build metadata is rejected by the regex above, but a `+` in the
+          # version would also be an illegal image tag.
+          if [[ "$version" == *"+"* ]]; then
+            echo "::error::build metadata is not allowed in a release tag"
+            exit 1
+          fi
+
+          cargo_version=$(sed -n '/\[workspace.package\]/,/^\[/p' Cargo.toml \
+            | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          package_version=$(node -p "require('./package.json').version")
+
+          if [[ "$cargo_version" != "$version" || "$package_version" != "$version" ]]; then
+            echo "::error::tag $RELEASE_TAG does not match the manifests"
+            echo "::error::  Cargo.toml   = $cargo_version"
+            echo "::error::  package.json = $package_version"
+            echo "::error::Run \`node scripts/bump-version.mjs\`, commit, and re-tag."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version (tag $RELEASE_TAG)"
 
   prepare:
     name: Resolve images
-    needs: release
-    # No version out of the release job means no release happened on this push.
-    if: needs.release.outputs.version != ''
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -129,12 +119,12 @@ jobs:
 
       - id: resolve
         env:
-          VERSION: ${{ needs.release.outputs.version }}
+          VERSION: ${{ needs.validate.outputs.version }}
           GHCR_OWNER: ${{ github.repository_owner }}
         run: |
           set -Eeuo pipefail
           version="$VERSION"
-          # semantic-release emits X.Y.Z or X.Y.Z-rc.1. Validate anyway: this
+          # The tag is validated in `validate`, but this value becomes an image
           # value becomes an image tag, and `1` and `latest` are both legal tags
           # that would quietly overwrite the wrong thing.
           if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -216,8 +206,7 @@ jobs:
 
   docker:
     name: Publish ${{ matrix.image.package }}
-    needs: [release, prepare]
-    if: needs.release.outputs.version != ''
+    needs: [validate, prepare]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # Job-level matrix, reading the PREVIOUS JOB's output — which is legal in
@@ -268,7 +257,7 @@ jobs:
           push: true
           platforms: ${{ matrix.image.platforms || 'linux/amd64' }}
           tags: |
-            ghcr.io/mytheclipse/${{ matrix.image.package }}:${{ needs.release.outputs.version }}
+            ghcr.io/mytheclipse/${{ matrix.image.package }}:${{ needs.validate.outputs.version }}
           # Newline-separated KEY=VALUE, which is what this action parses.
           # Passing a JSON object is accepted and handed through literally, so
           # every ARG in the Dockerfile resolves empty and the build still
@@ -282,7 +271,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.release.outputs.version }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
             org.opencontainers.image.title=${{ matrix.image.package }}
             ${{ matrix.image.labels || '' }}
           cache-from: type=gha,scope=${{ matrix.image.package }}
@@ -294,7 +283,7 @@ jobs:
       # overwriting this tag.
       - name: Verify the published tag resolves
         env:
-          IMAGE: ghcr.io/mytheclipse/${{ matrix.image.package }}:${{ needs.release.outputs.version }}
+          IMAGE: ghcr.io/mytheclipse/${{ matrix.image.package }}:${{ needs.validate.outputs.version }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -Eeuo pipefail
@@ -313,9 +302,9 @@ jobs:
       # image, so one image failing cannot leave another unpromoted, and a
       # prerelease can never move latest — the suffix is part of the version.
       - name: Promote latest
-        if: ${{ !contains(needs.release.outputs.version, '-') }}
+        if: ${{ !contains(needs.validate.outputs.version, '-') }}
         env:
-          VERSION: ${{ needs.release.outputs.version }}
+          VERSION: ${{ needs.validate.outputs.version }}
           GHCR_OWNER: ${{ github.repository_owner }}
         run: |
           set -Eeuo pipefail
