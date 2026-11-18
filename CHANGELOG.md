@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/MythEclipse/scraper/compare/v1.1.6...v1.2.0) (2026-11-18)
+
+
+### Features
+
+* **dashboard:** public homepage with live per-endpoint monitoring ([d2e1d9c](https://github.com/MythEclipse/scraper/commit/d2e1d9cada1b5bbe4ce3c04b550307444949e7db))
+
 ## [1.1.6](https://github.com/MythEclipse/scraper/compare/v1.1.5...v1.1.6) (2026-11-17)
 
 
