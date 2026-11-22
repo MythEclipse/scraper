@@ -70,7 +70,7 @@ dashmap = "6.1"
 # redis 0.32. Two redis versions in one graph means the `MultiplexedConnection`
 # taken from the pool is a different type from the one RedisCache accepts, so
 # the bridge stops compiling. Keep both on redis 0.32.
-deadpool-redis = { version = "0.22.1", features = ["serde"] }
+deadpool-redis = { version = "0.23.1", features = ["serde"] }
 rayon = "1.12"
 scraper = "0.29.0"
 flate2 = "1.1"
